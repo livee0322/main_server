@@ -27,8 +27,8 @@ mongoose.connect(process.env.MONGODB_URL, {
   console.error('❌ MongoDB connection error:', err);
 });
 
-// ✅ 라우터 연결 (경로: /signup 등 → 직접 사용 가능)
-app.use('/', userRoutes);  // 🟣 여기 경로 수정됨!
+// ✅ 라우터 연결 (✅ 이 부분이 수정된 핵심입니다)
+app.use('/api/auth', userRoutes);  // 🔁 여기로 수정 완료!
 
 // ✅ 기본 라우터
 app.get('/', (req, res) => {
