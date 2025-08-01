@@ -1,8 +1,8 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const userRoutes = require('./routes/user');
-require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -10,17 +10,19 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// MongoDB 연결
-mongoose.connect(process.env.MONGO_URI, {
+// ✅ MongoDB 연결
+mongoose.connect(process.env.MONGODB_URL, {
   useNewUrlParser: true,
   useUnifiedTopology: true
-}).then(() => {
+})
+.then(() => {
   console.log('✅ MongoDB connected');
-}).catch((err) => {
+})
+.catch((err) => {
   console.error('❌ MongoDB connection error:', err);
 });
 
-// 라우터 등록
+// ✅ 라우터 등록
 app.use('/', userRoutes);
 
 // 기본 라우트
