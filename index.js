@@ -5,9 +5,6 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
-// ✅ user 라우터 임포트
-const userRoutes = require('./routes/user');
-
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -27,8 +24,13 @@ mongoose.connect(process.env.MONGODB_URL, {
   console.error('❌ MongoDB connection error:', err);
 });
 
-// ✅ 라우터 연결 (✅ 이 부분이 수정된 핵심입니다)
-app.use('/api/auth', userRoutes);  // 🔁 여기로 수정 완료!
+// ✅ 라우터 임포트
+const userRoutes = require('./routes/user');
+const portfolioRoutes = require('./routes/portfolio');
+
+// ✅ 라우터 등록
+app.use('/api/auth', userRoutes);         // 회원가입/로그인
+app.use('/api/portfolio', portfolioRoutes); // 포트폴리오 저장 등
 
 // ✅ 기본 라우터
 app.get('/', (req, res) => {
@@ -39,6 +41,3 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
   console.log(`✅ Server is listening on port ${port}`);
 });
-
-const portfolioRoutes = require("./routes/portfolio");
-app.use("/portfolio", portfolioRoutes);
