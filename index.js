@@ -39,3 +39,6 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
   console.log(`✅ Server is listening on port ${port}`);
 });
+
+const portfolioRoutes = require("./routes/portfolio");
+app.use("/portfolio", portfolioRoutes);
