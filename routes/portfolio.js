@@ -1,7 +1,7 @@
 // routes/portfolio.js
 const express = require("express");
 const router = express.Router();
-const authMiddleware = require("../middleware/auth"); // 토큰 인증 미들웨어
+const authMiddleware = require("../src/middleware/auth");// 토큰 인증 미들웨어
 
 // Portfolio 모델 불러오기 (모델이 없다면 먼저 만들어야 함)
 const Portfolio = require("../models/Portfolio");
