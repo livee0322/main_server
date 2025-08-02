@@ -2,7 +2,7 @@
 
 const express = require("express");
 const router = express.Router();
-const authMiddleware = require("../middleware/auth"); // JWT 인증 미들웨어
+const authMiddleware = require("../src/middleware/auth"); //JWT 인증 미들웨어
 const Portfolio = require("../models/Portfolio");     // 포트폴리오 모델
 
 // ✅ 포트폴리오 저장
