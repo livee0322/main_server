@@ -2,8 +2,8 @@
 
 const express = require("express");
 const router = express.Router();
-const authMiddleware = require("../src/middleware/auth"); // ✅ 수정된 경로
-const Portfolio = require("../models/Portfolio");          // 포트폴리오 모델
+const authMiddleware = require("../src/middleware/auth");
+const Portfolio = require("../models/Portfolio");
 
 // ✅ 포트폴리오 저장
 router.post("/", authMiddleware, async (req, res) => {
@@ -23,8 +23,8 @@ router.post("/", authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ 내 포트폴리오 가져오기
-router.get("/my", authMiddleware, async (req, res) => {
+// ✅ 내 포트폴리오 가져오기 (GET /api/portfolio/me)
+router.get("/me", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const portfolio = await Portfolio.findOne({ user: userId });
