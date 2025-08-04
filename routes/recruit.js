@@ -41,12 +41,15 @@ router.put("/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ 전체 모집공고 조회 (🔥 user._id 포함)
+// ✅ 전체 모집공고 조회 + 유저별 필터링 지원
 router.get("/", async (req, res) => {
   try {
-    const list = await Recruit.find()
+    const { user } = req.query;
+
+    const filter = user ? { user } : {};
+    const list = await Recruit.find(filter)
       .sort({ createdAt: -1 })
-      .populate("user", "_id"); // ⭐ 중요: user._id 포함
+      .populate("user", "_id"); // user._id 접근 가능하게 함
 
     res.status(200).json(list);
   } catch (err) {
