@@ -41,10 +41,13 @@ router.put("/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ 전체 모집공고 조회
+// ✅ 전체 모집공고 조회 (🔥 user._id 포함)
 router.get("/", async (req, res) => {
   try {
-    const list = await Recruit.find().sort({ createdAt: -1 });
+    const list = await Recruit.find()
+      .sort({ createdAt: -1 })
+      .populate("user", "_id"); // ⭐ 중요: user._id 포함
+
     res.status(200).json(list);
   } catch (err) {
     console.error("❌ 모집공고 조회 오류:", err);
@@ -52,7 +55,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ 단일 공고 조회 (수정용)
+// ✅ 단일 공고 조회
 router.get("/:id", async (req, res) => {
   try {
     const recruit = await Recruit.findById(req.params.id);
