@@ -37,6 +37,12 @@ app.get('/', (req, res) => {
   res.send('✅ Livee Main Server is running!');
 });
 
+// ✅ recruit 라우터
+const recruitRoutes = require('./routes/recruit');  // ← 추가
+
+// 아래처럼 등록
+app.use('/api/recruit', recruitRoutes);  // ← 추가
+
 // ✅ 서버 시작
 app.listen(port, () => {
   console.log(`✅ Server is listening on port ${port}`);
