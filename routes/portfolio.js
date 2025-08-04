@@ -40,16 +40,26 @@ router.get("/me", authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router;
-
-// ✅ 전체 포트폴리오 조회 API (쇼호스트 리스트용)
+// ✅ 전체 포트폴리오 조회 (공개된 것만, 쇼호스트 리스트용)
 router.get("/all", async (req, res) => {
   try {
     const portfolios = await Portfolio.find({ isPublic: true }).sort({ createdAt: -1 });
-
     res.status(200).json(portfolios);
   } catch (err) {
     console.error("❌ 전체 포트폴리오 불러오기 오류:", err);
     res.status(500).json({ message: "서버 오류" });
   }
 });
+
+// ✅ 전체 포트폴리오 조회 (전체용, 테스트용으로 사용 가능)
+router.get("/", async (req, res) => {
+  try {
+    const portfolios = await Portfolio.find().sort({ createdAt: -1 });
+    res.status(200).json(portfolios);
+  } catch (err) {
+    console.error("❌ 전체 포트폴리오(ALL) 불러오기 오류:", err);
+    res.status(500).json({ message: "서버 오류" });
+  }
+});
+
+module.exports = router;
