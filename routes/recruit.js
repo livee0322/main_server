@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose"); // 🔥 ObjectId 변환용 추가
 const router = express.Router();
 const authMiddleware = require("../src/middleware/auth");
 const Recruit = require("../models/Recruit");
@@ -41,15 +42,17 @@ router.put("/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ 전체 모집공고 조회 + 유저별 필터링 지원
+// ✅ 전체 모집공고 조회 + 유저별 필터링 지원 (ObjectId 적용!)
 router.get("/", async (req, res) => {
   try {
     const { user } = req.query;
 
-    const filter = user ? { user } : {};
+    // 🔥 user가 있으면 ObjectId로 변환
+    const filter = user ? { user: new mongoose.Types.ObjectId(user) } : {};
+
     const list = await Recruit.find(filter)
       .sort({ createdAt: -1 })
-      .populate("user", "_id"); // user._id 접근 가능하게 함
+      .populate("user", "_id"); // user._id 접근 가능
 
     res.status(200).json(list);
   } catch (err) {
