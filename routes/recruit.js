@@ -1,10 +1,10 @@
 const express = require("express");
-const mongoose = require("mongoose"); // 🔥 ObjectId 변환용 추가
+const mongoose = require("mongoose");
 const router = express.Router();
 const authMiddleware = require("../src/middleware/auth");
 const Recruit = require("../models/Recruit");
 
-// ✅ 모집공고 등록
+// 📌 공고 등록
 router.post("/", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -17,17 +17,14 @@ router.post("/", authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ 모집공고 수정
+// 📌 공고 수정
 router.put("/:id", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
     const recruitId = req.params.id;
 
     const recruit = await Recruit.findById(recruitId);
-    if (!recruit) {
-      return res.status(404).json({ message: "공고를 찾을 수 없습니다." });
-    }
-
+    if (!recruit) return res.status(404).json({ message: "공고를 찾을 수 없습니다." });
     if (recruit.user.toString() !== userId) {
       return res.status(403).json({ message: "수정 권한이 없습니다." });
     }
@@ -42,18 +39,12 @@ router.put("/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ 전체 모집공고 조회 + 유저별 필터링 지원 (ObjectId 적용!)
+// 📌 전체 조회 (필터: user 쿼리 사용)
 router.get("/", async (req, res) => {
   try {
     const { user } = req.query;
-
-    // 🔥 user가 있으면 ObjectId로 변환
     const filter = user ? { user: new mongoose.Types.ObjectId(user) } : {};
-
-    const list = await Recruit.find(filter)
-      .sort({ createdAt: -1 })
-      .populate("user", "_id"); // user._id 접근 가능
-
+    const list = await Recruit.find(filter).sort({ createdAt: -1 });
     res.status(200).json(list);
   } catch (err) {
     console.error("❌ 모집공고 조회 오류:", err);
@@ -61,16 +52,43 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ 단일 공고 조회
+// 📌 🔥 로그인한 사용자의 내 공고 조회 (/me)
+router.get("/me", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const list = await Recruit.find({ user: userId }).sort({ createdAt: -1 });
+    res.status(200).json(list);
+  } catch (err) {
+    console.error("❌ 내 공고 불러오기 오류:", err);
+    res.status(500).json({ message: "서버 오류" });
+  }
+});
+
+// 📌 단일 공고 조회
 router.get("/:id", async (req, res) => {
   try {
     const recruit = await Recruit.findById(req.params.id);
-    if (!recruit) {
-      return res.status(404).json({ message: "공고를 찾을 수 없습니다." });
-    }
+    if (!recruit) return res.status(404).json({ message: "공고를 찾을 수 없습니다." });
     res.status(200).json(recruit);
   } catch (err) {
     console.error("❌ 단일 공고 조회 오류:", err);
+    res.status(500).json({ message: "서버 오류" });
+  }
+});
+
+// 📌 공고 삭제
+router.delete("/:id", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const recruit = await Recruit.findById(req.params.id);
+    if (!recruit) return res.status(404).json({ message: "공고를 찾을 수 없습니다." });
+    if (recruit.user.toString() !== userId) {
+      return res.status(403).json({ message: "삭제 권한이 없습니다." });
+    }
+    await recruit.remove();
+    res.status(200).json({ message: "공고가 삭제되었습니다." });
+  } catch (err) {
+    console.error("❌ 공고 삭제 오류:", err);
     res.status(500).json({ message: "서버 오류" });
   }
 });
