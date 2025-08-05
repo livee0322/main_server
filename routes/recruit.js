@@ -25,6 +25,7 @@ router.put("/:id", authMiddleware, async (req, res) => {
 
     const recruit = await Recruit.findById(recruitId);
     if (!recruit) return res.status(404).json({ message: "공고를 찾을 수 없습니다." });
+
     if (recruit.user.toString() !== userId) {
       return res.status(403).json({ message: "수정 권한이 없습니다." });
     }
@@ -39,7 +40,7 @@ router.put("/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// 📌 전체 조회 (필터: user 쿼리 사용)
+// 📌 전체 조회 (user 쿼리로 필터링 가능)
 router.get("/", async (req, res) => {
   try {
     const { user } = req.query;
@@ -52,7 +53,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// 📌 🔥 로그인한 사용자의 내 공고 조회 (/me)
+// 📌 내 공고만 조회 (/me)
 router.get("/me", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -76,16 +77,22 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// 📌 공고 삭제
+// 📌 공고 삭제 (수정된 부분)
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
-    const recruit = await Recruit.findById(req.params.id);
+    const recruitId = req.params.id;
+
+    const recruit = await Recruit.findById(recruitId);
     if (!recruit) return res.status(404).json({ message: "공고를 찾을 수 없습니다." });
+
     if (recruit.user.toString() !== userId) {
       return res.status(403).json({ message: "삭제 권한이 없습니다." });
     }
-    await recruit.remove();
+
+    // ✅ Mongoose v6 이상에서 안전하게 삭제
+    await Recruit.deleteOne({ _id: recruitId });
+
     res.status(200).json({ message: "공고가 삭제되었습니다." });
   } catch (err) {
     console.error("❌ 공고 삭제 오류:", err);
