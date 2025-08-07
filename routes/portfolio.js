@@ -31,7 +31,7 @@ router.get("/me", authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ 포트폴리오 저장
+// ✅ 포트폴리오 저장 (POST)
 router.post("/", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -49,7 +49,7 @@ router.post("/", authMiddleware, async (req, res) => {
   }
 });
 
-// ✅ 포트폴리오 수정
+// ✅ 포트폴리오 수정 (PUT)
 router.put("/:id", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -72,8 +72,6 @@ router.put("/:id", authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router;
-
 // ✅ 포트폴리오 삭제 (DELETE /api/portfolio/me)
 router.delete("/me", authMiddleware, async (req, res) => {
   try {
@@ -91,3 +89,5 @@ router.delete("/me", authMiddleware, async (req, res) => {
     res.status(500).json({ message: "서버 오류" });
   }
 });
+
+module.exports = router;
