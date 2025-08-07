@@ -8,32 +8,18 @@ const portfolioSchema = new mongoose.Schema(
       required: true,
       unique: true // 사용자당 하나만
     },
-    profileImage: {
-      type: String,
-      default: ""
-    },
-    backgroundImage: {
-      type: String,
-      default: ""
-    },
-    name: {
-      type: String,
-      required: true
-    },
+    profileImage: String,
+    backgroundImage: String,
+    name: { type: String, required: true },
     statusMessage: String,
     jobTag: String,
     region: String,
     experienceYears: Number,
     introText: String,
     youtubeLinks: [String],
-    isPublic: {
-      type: Boolean,
-      default: true
-    }
+    isPublic: { type: Boolean, default: true }
   },
-  {
-    timestamps: true // createdAt, updatedAt 자동 생성
-  }
+  { timestamps: true }
 );
 
 module.exports = mongoose.model("Portfolio", portfolioSchema);
