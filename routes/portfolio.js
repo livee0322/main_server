@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const authMiddleware = require("../middleware/auth"); // ✅ 경로 수정됨
+const authMiddleware = require("../src/middleware/auth"); // ✅ 경로 수정 완료
 const Portfolio = require("../models/Portfolio");
 
 // 🔹 내 포트폴리오 등록 (중복 방지)
