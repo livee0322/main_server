@@ -1,4 +1,3 @@
-// 📍 /middleware/auth.js (최종 수정본)
 const jwt = require("jsonwebtoken");
 
 module.exports = (req, res, next) => {
@@ -12,13 +11,9 @@ module.exports = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // ✅ 여기!!
-    req.user = decoded; // decoded = { id: ... } 라고 가정
-
+    req.user = decoded; // 이후 req.user로 사용자 정보 접근 가능
     next();
   } catch (err) {
-    console.error("❌ auth 미들웨어 오류:", err);
     return res.status(403).json({ message: "유효하지 않은 토큰입니다." });
   }
 };
