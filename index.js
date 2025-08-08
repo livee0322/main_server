@@ -24,24 +24,20 @@ mongoose.connect(process.env.MONGODB_URL, {
   console.error('❌ MongoDB connection error:', err);
 });
 
-// ✅ 라우터 임포트
+// ✅ 라우터 임포트 (정확한 위치)
 const userRoutes = require('./routes/user');
 const portfolioRoutes = require('./routes/portfolio');
+const recruitRoutes = require('./routes/recruit');
 
 // ✅ 라우터 등록
-app.use('/api/auth', userRoutes);         // 회원가입/로그인
-app.use('/api/portfolio', portfolioRoutes); // 포트폴리오 저장 등
+app.use('/api/auth', userRoutes);            // 회원가입, 로그인
+app.use('/api/portfolio', portfolioRoutes);  // 포트폴리오 등록/조회
+app.use('/api/recruit', recruitRoutes);      // 공고 등록/조회
 
 // ✅ 기본 라우터
 app.get('/', (req, res) => {
   res.send('✅ Livee Main Server is running!');
 });
-
-// ✅ recruit 라우터
-const recruitRoutes = require('./routes/recruit');  // ← 추가
-
-// 아래처럼 등록
-app.use('/api/recruit', recruitRoutes);  // ← 추가
 
 // ✅ 서버 시작
 app.listen(port, () => {
