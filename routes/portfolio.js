@@ -1,9 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const authMiddleware = require("../src/middleware/auth");
+const authMiddleware = require("../middleware/auth");
 const Portfolio = require("../models/Portfolio");
 
-// 🔹 내 포트폴리오 등록 (중복 방지)
+// 🔹 내 포트폴리오 등록
 router.post("/", authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -42,7 +42,7 @@ router.get("/me", authMiddleware, async (req, res) => {
   }
 });
 
-// 🔹 전체 공개 포트폴리오 (쇼호스트 탭용)
+// 🔹 전체 공개 포트폴리오
 router.get("/all", async (req, res) => {
   try {
     const portfolios = await Portfolio.find({ isPublic: true }).sort({ createdAt: -1 });
