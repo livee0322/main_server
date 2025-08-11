@@ -1,112 +1,71 @@
-const express = require("express");
-const mongoose = require("mongoose");
-const router = express.Router();
-const authMiddleware = require("../src/middleware/auth");
-const Recruit = require("../models/Recruit");
+const router = require('express').Router();
+const { body, validationResult } = require('express-validator');
+const Recruit = require('../models/Recruit');
+const auth = require('../src/middleware/auth');
+const requireRole = require('../src/middleware/requireRole');
 
-// 📌 공고 등록
-router.post("/", authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const newRecruit = new Recruit({ user: userId, ...req.body });
-    await newRecruit.save();
-    res.status(201).json({ message: "모집공고가 등록되었습니다." });
-  } catch (err) {
-    console.error("❌ 모집공고 등록 오류:", err);
-    res.status(500).json({ message: "서버 오류로 등록 실패" });
-  }
+// 리스트 (전체)
+router.get('/', async (req, res) => {
+  const page = Math.max(parseInt(req.query.page||'1'),1);
+  const limit = Math.min(parseInt(req.query.limit||'20'), 50);
+  const items = await Recruit.find({})
+    .sort({ createdAt: -1 })
+    .skip((page-1)*limit)
+    .limit(limit);
+  return res.ok({ items });
 });
 
-// 📌 공고 수정
-router.put("/:id", authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const recruitId = req.params.id;
-
-    const recruit = await Recruit.findById(recruitId);
-    if (!recruit) return res.status(404).json({ message: "공고를 찾을 수 없습니다." });
-
-    if (recruit.user.toString() !== userId) {
-      return res.status(403).json({ message: "수정 권한이 없습니다." });
-    }
-
-    Object.assign(recruit, req.body);
-    await recruit.save();
-
-    res.status(200).json({ message: "공고가 수정되었습니다." });
-  } catch (err) {
-    console.error("❌ 모집공고 수정 오류:", err);
-    res.status(500).json({ message: "서버 오류로 수정 실패" });
-  }
+// 내 공고
+router.get('/mine', auth, requireRole('brand','admin'), async (req, res) => {
+  const items = await Recruit.find({ user: req.user.id }).sort({ createdAt: -1 });
+  return res.ok({ items });
 });
 
-// 📌 전체 공고 조회 (ex: /api/recruit?user=abc123)
-router.get("/", async (req, res) => {
-  try {
-    const { user } = req.query;
-    const filter = user ? { user: new mongoose.Types.ObjectId(user) } : {};
-    const list = await Recruit.find(filter).sort({ createdAt: -1 });
-    res.status(200).json(list);
-  } catch (err) {
-    console.error("❌ 모집공고 조회 오류:", err);
-    res.status(500).json({ message: "서버 오류" });
+// 생성 (브랜드 전용)
+router.post('/',
+  auth, requireRole('brand'),
+  body('title').isLength({ min: 1 }),
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.fail('유효성 오류', 'VALIDATION_FAILED', 422, { errors: errors.array() });
+
+    const payload = { ...req.body, user: req.user.id };
+    const created = await Recruit.create(payload);
+    return res.ok({ message: '공고 등록', data: created }, 201);
   }
+);
+
+// 수정
+router.put('/:id', auth, requireRole('brand','admin'), async (req, res) => {
+  const updated = await Recruit.findOneAndUpdate(
+    { _id: req.params.id, user: req.user.id },
+    { $set: req.body },
+    { new: true }
+  );
+  if (!updated) return res.fail('수정 권한이 없거나 존재하지 않습니다.', 'RECRUIT_FORBIDDEN_EDIT', 403);
+  return res.ok({ message: '수정 완료', data: updated });
 });
 
-// 📌 내 공고 조회
-router.get("/me", authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const list = await Recruit.find({ user: userId }).sort({ createdAt: -1 });
-    res.status(200).json(list);
-  } catch (err) {
-    console.error("❌ 내 공고 불러오기 오류:", err);
-    res.status(500).json({ message: "서버 오류" });
-  }
+// 삭제
+router.delete('/:id', auth, requireRole('brand','admin'), async (req, res) => {
+  const removed = await Recruit.findOneAndDelete({ _id: req.params.id, user: req.user.id });
+  if (!removed) return res.fail('삭제 권한이 없거나 존재하지 않습니다.', 'RECRUIT_FORBIDDEN_DELETE', 403);
+  return res.ok({ message: '삭제 완료' });
 });
 
-// 📌 단일 공고 조회 (ObjectId 유효성 검사 추가)
-router.get("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
+// 일정 (today ~ +3일)
+router.get('/schedule', async (req, res) => {
+  const now = new Date();
+  now.setHours(0,0,0,0);
+  const end = new Date(now);
+  end.setDate(end.getDate() + 3);
+  end.setHours(23,59,59,999);
 
-    // ObjectId 형식 확인
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "유효하지 않은 ID 형식" });
-    }
-
-    const recruit = await Recruit.findById(id);
-    if (!recruit) return res.status(404).json({ message: "공고를 찾을 수 없습니다." });
-    res.status(200).json(recruit);
-  } catch (err) {
-    console.error("❌ 단일 공고 조회 오류:", err);
-    res.status(500).json({ message: "서버 오류" });
-  }
-});
-
-// 📌 공고 삭제
-router.delete("/:id", authMiddleware, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const recruitId = req.params.id;
-
-    if (!mongoose.Types.ObjectId.isValid(recruitId)) {
-      return res.status(400).json({ message: "유효하지 않은 ID 형식" });
-    }
-
-    const recruit = await Recruit.findById(recruitId);
-    if (!recruit) return res.status(404).json({ message: "공고를 찾을 수 없습니다." });
-
-    if (recruit.user.toString() !== userId) {
-      return res.status(403).json({ message: "삭제 권한이 없습니다." });
-    }
-
-    await Recruit.deleteOne({ _id: recruitId });
-    res.status(200).json({ message: "공고가 삭제되었습니다." });
-  } catch (err) {
-    console.error("❌ 공고 삭제 오류:", err);
-    res.status(500).json({ message: "서버 오류" });
-  }
+  const items = await Recruit.find({ date: { $gte: now, $lte: end } })
+    .sort({ date: 1 })
+    .limit(50)
+    .select('title brand date thumbnailUrl description');
+  return res.ok({ items });
 });
 
 module.exports = router;
