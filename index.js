@@ -48,9 +48,9 @@ app.use((req, res, next) => {
 // 라우터 (파일명과 정확히 1:1 매칭!)
 // ──────────────────────────────────────────────────────
 // ⚠️ routes 폴더에 실제 파일명은 단수형입니다.
-const users      = require('./routes/user');       // routes/user.js
-const portfolios = require('./routes/portfolio');  // routes/portfolio.js
-const recruits   = require('./routes/recruit');    // routes/recruit.js
+const users      = require('./routes/User');       // routes/user.js
+const portfolios = require('./routes/Portfolio');  // routes/portfolio.js
+const recruits   = require('./routes/Recruit');    // routes/recruit.js
 
 // 버저닝된 메인 엔드포인트(옵션 B 통일)
 const V1 = '/api/v1';
