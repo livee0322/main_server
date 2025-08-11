@@ -23,7 +23,7 @@ app.use((req, res, next) => {
 });
 
 // 라우터
-const users = require('./routes/users');
+const userRoutes = require('./routes/user');
 const portfolios = require('./routes/portfolios');
 const recruits = require('./routes/recruits');
 
