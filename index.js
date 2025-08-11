@@ -1,47 +1,49 @@
-// ✅ 환경변수 로드
 require('dotenv').config();
-
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
 const app = express();
 
-// ✅ 포트는 반드시 Render에서 주는 process.env.PORT만 사용해야 함
-const port = process.env.PORT;
-
-// ✅ 미들웨어
+// CORS (필요 시 origin 화이트리스트로 교체)
 app.use(cors());
 app.use(express.json());
 
-// ✅ MongoDB 연결
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => {
-  console.log('✅ MongoDB connected');
-})
-.catch((err) => {
-  console.error('❌ MongoDB connection error:', err);
+// DB
+mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(()=>console.log('✅ MongoDB connected'))
+  .catch(err=>console.error('❌ MongoDB connect error:', err));
+
+// 공통 응답 헬퍼
+app.use((req, res, next) => {
+  res.ok = (data = {}, status = 200) => res.status(status).json({ ok: true, ...data });
+  res.fail = (message = '요청을 처리할 수 없습니다.', code = 'INTERNAL_ERROR', status = 400, extra={}) =>
+    res.status(status).json({ ok: false, code, message, ...extra });
+  next();
 });
 
-// ✅ 라우터 임포트 (경로 정확히 확인)
-const userRoutes = require('./routes/user');           // 회원가입, 로그인
-const portfolioRoutes = require('./routes/portfolio'); // 포트폴리오 관련
-const recruitRoutes = require('./routes/recruit');     // 모집공고 관련
+// 라우터
+const users = require('./routes/users');
+const portfolios = require('./routes/portfolios');
+const recruits = require('./routes/recruits');
 
-// ✅ 라우터 등록
-app.use('/api/auth', userRoutes);
-app.use('/api/portfolio', portfolioRoutes);
-app.use('/api/recruit', recruitRoutes);
+app.use('/api/v1/users', users);
+app.use('/api/v1/portfolios', portfolios);
+app.use('/api/v1/recruits', recruits);
 
-// ✅ 기본 라우트 확인용
-app.get('/', (req, res) => {
-  res.send('✅ Livee Main Server is running!');
+// (옵션) 구버전 호환
+app.use('/api/auth', users);        // signup/login/me
+app.use('/api/portfolio', portfolios);
+app.use('/api/recruit', recruits);
+
+// Health
+app.get('/', (_req, res) => res.send('✅ Livee Main Server is running!'));
+
+// 에러 핸들러
+app.use((err, _req, res, _next) => {
+  console.error('🔥', err);
+  res.fail(err.message || '서버 오류', 'INTERNAL_ERROR', err.status || 500);
 });
 
-// ✅ 서버 시작
-app.listen(port, () => {
-  console.log(`✅ Server is listening on port ${port}`);
-});
+const port = process.env.PORT || 8080;
+app.listen(port, () => console.log(`✅ Server listening on ${port}`));
