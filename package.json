@@ -1,11 +1,11 @@
 {
   "name": "livee-server",
   "version": "1.0.0",
-  "main": "src/index.js",
+  "main": "index.js",
   "type": "commonjs",
   "engines": { "node": ">=18" },
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node index.js",
     "build": "echo \"no build step for server\"",
     "postinstall": "node -e \"console.log('postinstall skipped')\""
   },
