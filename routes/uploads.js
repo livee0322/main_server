@@ -1,4 +1,4 @@
-// routes/uploads.js
+// routes/uploads.js (refactored)
 const router = require('express').Router();
 const cloudinary = require('../src/lib/cloudinary');
 const auth = require('../src/middleware/auth');
@@ -6,56 +6,66 @@ const requireRole = require('../src/middleware/requireRole');
 
 const DEFAULT_FOLDER = process.env.CLOUDINARY_FOLDER || 'livee';
 
-// 작은 유틸: CLOUDINARY_URL에서 cloud_name 추출 (fallback)
-function parseCloudNameFromUrl(url) {
-  try {
-    // cloudinary://<key>:<secret>@<cloud_name>
-    const at = url.split('@')[1];
-    return at?.trim();
-  } catch { return undefined; }
+/** Cloudinary 자격증명 읽기 (CLOUDINARY_URL만 신뢰) */
+function getCreds() {
+  const cfg = cloudinary.config(); // v2가 CLOUDINARY_URL 자동 인식
+  // 개별 키가 섞여 있을 경우 혼란 방지: URL만 사용하도록 강제
+  const cloudName = cfg.cloud_name;
+  const apiKey    = cfg.api_key;
+  const apiSecret = cfg.api_secret;
+  return { cloudName, apiKey, apiSecret };
 }
 
+/** 헬스체크 */
 router.get('/ping', (_req, res) => res.json({ ok: true, message: 'uploads alive' }));
 
-router.get('/signature', auth, requireRole('brand','admin'), async (_req, res) => {
+/** (옵션) 현재 자격증명 노출 없는 디버그 */
+router.get('/debug', auth, requireRole('admin'), (_req, res) => {
+  const { cloudName, apiKey, apiSecret } = getCreds();
+  return res.json({
+    ok: true,
+    cloudName,
+    apiKey,
+    hasSecret: Boolean(apiSecret)
+  });
+});
+
+/** 🔐 서명 발급 (brand/admin 전용) */
+router.get('/signature', auth, requireRole('brand', 'admin'), async (_req, res) => {
   try {
-    const ts = Math.round(Date.now() / 1000);
-    const paramsToSign = { timestamp: ts, folder: DEFAULT_FOLDER };
-
-    // 안전하게 환경값 모으기 (CLOUDINARY_URL 또는 개별 키)
-    const cfg = cloudinary.config();
-    const cloudName =
-      cfg.cloud_name ||
-      process.env.CLOUDINARY_CLOUD_NAME ||
-      parseCloudNameFromUrl(process.env.CLOUDINARY_URL || '');
-
-    const apiKey =
-      cfg.api_key || process.env.CLOUDINARY_API_KEY;
-
-    const apiSecret =
-      cfg.api_secret || process.env.CLOUDINARY_API_SECRET;
+    const { cloudName, apiKey, apiSecret } = getCreds();
 
     if (!cloudName || !apiKey || !apiSecret) {
-      console.error('[uploads/signature] CLOUDINARY ENV MISSING', {
-        hasUrl: !!process.env.CLOUDINARY_URL,
-        cloudName, hasApiKey: !!apiKey, hasApiSecret: !!apiSecret
+      console.error('[uploads/signature] MISSING CREDS', {
+        cloudName, hasApiKey: !!apiKey, hasApiSecret: !!apiSecret,
+        hasUrl: !!process.env.CLOUDINARY_URL
       });
       return res.status(500).json({
         ok: false,
         code: 'CLOUDINARY_ENV_MISSING',
-        message: 'Cloudinary 환경변수가 올바르지 않습니다. (cloud name / api key / secret 확인)'
+        message: 'Cloudinary 환경변수(CLOUDINARY_URL)가 올바르지 않습니다.'
       });
     }
 
+    // timestamp는 초 단위, 5분 이내 유효 (클라이언트가 오래된 응답 캐시하지 않게)
+    const timestamp = Math.floor(Date.now() / 1000);
+    const folder = DEFAULT_FOLDER;
+
+    // 클라이언트가 전송할 정확한 파라미터만 서명
+    const paramsToSign = { timestamp, folder };
     const signature = cloudinary.utils.api_sign_request(paramsToSign, apiSecret);
 
     return res.json({
       ok: true,
-      data: { cloudName, apiKey, timestamp: ts, folder: DEFAULT_FOLDER, signature }
+      data: { cloudName, apiKey, timestamp, folder, signature }
     });
-  } catch (e) {
-    console.error('[uploads/signature] error:', e);
-    return res.status(500).json({ ok:false, code:'CLOUDINARY_SIGN_FAIL', message:'서명 생성 실패' });
+  } catch (err) {
+    console.error('[uploads/signature] error:', err);
+    return res.status(500).json({
+      ok: false,
+      code: 'CLOUDINARY_SIGN_FAIL',
+      message: '서명 생성 실패'
+    });
   }
 });
 
