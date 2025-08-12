@@ -2,19 +2,21 @@
   "name": "livee-server",
   "version": "1.0.0",
   "main": "src/index.js",
+  "type": "commonjs",
   "engines": { "node": ">=18" },
   "scripts": {
     "start": "node src/index.js",
-    "build": "echo 'no build'",
-    "postinstall": "npm ci || npm install"
+    "build": "echo \"no build step for server\"",
+    "postinstall": "node -e \"console.log('postinstall skipped')\""
   },
   "dependencies": {
-    "cloudinary": "^1.41.3",
     "express": "^4.19.2",
     "cors": "^2.8.5",
     "mongoose": "^8.5.1",
     "dotenv": "^16.4.5",
     "jsonwebtoken": "^9.0.2",
-    "express-validator": "^7.0.1"
-  }
+    "express-validator": "^7.0.1",
+    "cloudinary": "^1.41.3"
+  },
+  "devDependencies": {}
 }
