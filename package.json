@@ -1,6 +1,7 @@
 {
   "name": "livee-server",
   "version": "1.0.0",
+  "private": true,
   "main": "index.js",
   "type": "commonjs",
   "engines": { "node": ">=18" },
@@ -10,13 +11,13 @@
     "postinstall": "node -e \"console.log('postinstall skipped')\""
   },
   "dependencies": {
-    "express": "^4.19.2",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
-    "mongoose": "^8.5.1",
     "dotenv": "^16.4.5",
-    "jsonwebtoken": "^9.0.2",
+    "express": "^4.19.2",
     "express-validator": "^7.0.1",
-    "cloudinary": "^1.41.3"
-  },
-  "devDependencies": {}
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.5.1"
+  }
 }
