@@ -26,6 +26,9 @@ app.use((req, res, next) => {
     res.status(status).json({ ok: false, code, message, ...extra });
   next();
 });
+// 서명 라우터 연결
+const uploadsRouter = require('./routes/uploads');
+app.use('/api/v1/uploads', uploadsRouter);
 
 /* ====== 라우터 로드 (파일명 그대로) ====== */
 const userRouter       = require('./routes/user');        // ./routes/user.js
