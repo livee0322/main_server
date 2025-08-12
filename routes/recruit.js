@@ -1,3 +1,4 @@
+// routes/recruits.js
 const router = require('express').Router();
 const { body, validationResult } = require('express-validator');
 const Recruit = require('../models/Recruit');
@@ -6,8 +7,8 @@ const requireRole = require('../src/middleware/requireRole');
 
 // 리스트 (전체)
 router.get('/', async (req, res) => {
-  const page = Math.max(parseInt(req.query.page||'1'),1);
-  const limit = Math.min(parseInt(req.query.limit||'20'), 50);
+  const page = Math.max(parseInt(req.query.page||'1',10),1);
+  const limit = Math.min(parseInt(req.query.limit||'20',10), 50);
   const items = await Recruit.find({})
     .sort({ createdAt: -1 })
     .skip((page-1)*limit)
@@ -23,13 +24,25 @@ router.get('/mine', auth, requireRole('brand','admin'), async (req, res) => {
 
 // 생성 (브랜드 전용)
 router.post('/',
-  auth, requireRole('brand'),
-  body('title').isLength({ min: 1 }),
+  auth,
+  requireRole('brand'),
+  body('title').isLength({ min: 1 }).withMessage('제목은 필수입니다.'),
+  body('date').isLength({ min: 1 }).withMessage('촬영일은 필수입니다.'),
+  body('imageUrl').isLength({ min: 1 }).withMessage('썸네일은 필수입니다.'),
   async (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.fail('유효성 오류', 'VALIDATION_FAILED', 422, { errors: errors.array() });
+    if (!errors.isEmpty()) {
+      return res.fail('유효성 오류', 'VALIDATION_FAILED', 422, { errors: errors.array() });
+    }
 
-    const payload = { ...req.body, user: req.user.id };
+    const { date, ...rest } = req.body;
+    // ✅ date 문자열을 Date로 변환 (자정 기준)
+    const dateObj = new Date(date);
+    if (isNaN(dateObj.getTime())) {
+      return res.fail('유효하지 않은 날짜 형식입니다.', 'INVALID_DATE', 422);
+    }
+
+    const payload = { ...rest, date: dateObj, user: req.user.id };
     const created = await Recruit.create(payload);
     return res.ok({ message: '공고 등록', data: created }, 201);
   }
@@ -37,9 +50,17 @@ router.post('/',
 
 // 수정
 router.put('/:id', auth, requireRole('brand','admin'), async (req, res) => {
+  const update = { ...req.body };
+  if (update.date) {
+    const d = new Date(update.date);
+    if (isNaN(d.getTime())) {
+      return res.fail('유효하지 않은 날짜 형식입니다.', 'INVALID_DATE', 422);
+    }
+    update.date = d;
+  }
   const updated = await Recruit.findOneAndUpdate(
     { _id: req.params.id, user: req.user.id },
-    { $set: req.body },
+    { $set: update },
     { new: true }
   );
   if (!updated) return res.fail('수정 권한이 없거나 존재하지 않습니다.', 'RECRUIT_FORBIDDEN_EDIT', 403);
@@ -64,7 +85,8 @@ router.get('/schedule', async (req, res) => {
   const items = await Recruit.find({ date: { $gte: now, $lte: end } })
     .sort({ date: 1 })
     .limit(50)
-    .select('title brand date thumbnailUrl description');
+    // ✅ 프론트가 쓰는 필드명(imageUrl)로 통일
+    .select('title brand date imageUrl description');
   return res.ok({ items });
 });
 
