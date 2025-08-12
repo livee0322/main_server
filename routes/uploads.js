@@ -1,36 +1,44 @@
 // routes/uploads.js
 const router = require('express').Router();
-const cloudinary = require('cloudinary').v2;
-const auth = require('../src/middleware/auth');
-const requireRole = require('../src/middleware/requireRole');
+const cloudinary = require('../src/lib/cloudinary');      // ← 설정 모듈
+const auth = require('../src/middleware/auth');           // ← JWT 미들웨어
+const requireRole = require('../src/middleware/requireRole'); // ← role 체크
 
 const DEFAULT_FOLDER = process.env.CLOUDINARY_FOLDER || 'livee';
 
-// 서명 발급 (브랜드/관리자만)
-router.get('/signature', auth, requireRole('brand','admin'), async (req, res) => {
+// 헬스체크(선택)
+router.get('/ping', (_req, res) => res.json({ ok: true, message: 'uploads alive' }));
+
+// 🔐 브랜드/관리자 전용: Cloudinary 서명 발급
+router.get('/signature', auth, requireRole('brand', 'admin'), async (_req, res) => {
   try {
-    const timestamp = Math.round(Date.now() / 1000);
-    // 프론트에 노출될 파라미터만 포함 (preset 없이 서명 업로드)
-    const paramsToSign = {
-      timestamp,
-      folder: DEFAULT_FOLDER,
-    };
+    const ts = Math.round(Date.now() / 1000);
+    const paramsToSign = { timestamp: ts, folder: DEFAULT_FOLDER };
 
-    // api_secret 은 서버에서만 사용됨
-    const signature = cloudinary.utils.api_sign_request(
-      paramsToSign,
-      cloudinary.config().api_secret
-    );
+    const cfg = cloudinary.config(); // { cloud_name, api_key, api_secret, ... }
+    if (!cfg.api_key || !cfg.api_secret || !cfg.cloud_name) {
+      return res.status(500).json({
+        ok: false,
+        code: 'CLOUDINARY_ENV_MISSING',
+        message: 'Cloudinary 환경변수가 설정되지 않았습니다.'
+      });
+    }
 
-    return res.ok({
-      cloudName: cloudinary.config().cloud_name,
-      apiKey: cloudinary.config().api_key,
-      timestamp,
-      folder: DEFAULT_FOLDER,
-      signature,
+    const signature = cloudinary.utils.api_sign_request(paramsToSign, cfg.api_secret);
+
+    return res.json({
+      ok: true,
+      data: {
+        cloudName: cfg.cloud_name,
+        apiKey: cfg.api_key,
+        timestamp: ts,
+        folder: DEFAULT_FOLDER,
+        signature
+      }
     });
   } catch (e) {
-    return res.fail('서명 생성 실패', 'CLOUDINARY_SIGN_FAIL', 500);
+    console.error('[uploads/signature] error:', e);
+    return res.status(500).json({ ok: false, code: 'CLOUDINARY_SIGN_FAIL', message: '서명 생성 실패' });
   }
 });
 
