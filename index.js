@@ -1,4 +1,4 @@
-// index.js (refined & robust)
+// index.js (refined & robust with fixes)
 require('dotenv').config();
 const express  = require('express');
 const cors     = require('cors');
@@ -41,7 +41,19 @@ app.use(cors({
     cb(ok ? null : new Error(`CORS blocked: ${origin}`), ok);
   },
 }));
+app.options('*', cors({
+  credentials: CORS_CREDENTIALS,
+  origin: ORIGINS.includes('*') ? '*' : ORIGINS
+}));
 app.use(express.json({ limit: JSON_LIMIT }));
+
+/* ====== CORS Error Handler ====== */
+app.use((err, _req, res, next) => {
+  if (err && String(err.message || '').startsWith('CORS blocked:')) {
+    return res.status(403).json({ ok:false, code:'CORS_BLOCKED', message: err.message });
+  }
+  return next(err);
+});
 
 /* ====== Response helpers ====== */
 app.use((req, res, next) => {
@@ -52,24 +64,17 @@ app.use((req, res, next) => {
 });
 
 /* ====== MongoDB ====== */
-/* ====== DB (Mongoose 7 + Node Driver 5) ====== */
-if (!process.env.MONGO_URI) {
-  console.warn('⚠️  MONGO_URI 가 설정되지 않았습니다. Render의 Environment Variables를 확인하세요.');
-}
-
 const MONGO_URI = process.env.MONGO_URI;
 const MONGO_OPTS = {
   autoIndex: true,
-  // 최신 드라이버에서 keepAlive/keepAliveInitialDelay 제거됨
   serverSelectionTimeoutMS: 10000, // 클러스터 선택 타임아웃
   socketTimeoutMS: 45000,          // 소켓 타임아웃
-  maxPoolSize: 10,                 // 커넥션 풀
-  // 필요시: connectTimeoutMS: 20000,
+  maxPoolSize: 10,
 };
 
 mongoose.set('strictQuery', true);
 
-const MAX_RETRY   = Number(process.env.MONGO_MAX_RETRY ?? 10);
+const MAX_RETRY   = Infinity; // 무한 재시도
 const BASE_DELAY  = Number(process.env.MONGO_BASE_DELAY_MS ?? 2000); // 2s
 const JITTER_MS   = 500;
 
@@ -77,23 +82,24 @@ async function connectWithRetry(attempt = 1) {
   try {
     await mongoose.connect(MONGO_URI, MONGO_OPTS);
     console.log('✅ MongoDB connected');
+    console.log('Mongoose', mongoose.version);
+    console.log('MongoDB driver', require('mongodb/package.json').version);
   } catch (err) {
     const next = Math.min(
       BASE_DELAY * Math.pow(2, attempt - 1) + Math.floor(Math.random() * JITTER_MS),
       60_000 // 최대 60초
     );
     console.error(`❌ Mongo connect error (attempt ${attempt}):`, err.message);
-    if (attempt >= MAX_RETRY) {
-      console.error('💥 Reached max retry attempts. Exiting.');
-      process.exit(1);
-      return;
-    }
     console.log(`⏳ retrying in ${Math.round(next / 1000)}s...`);
     setTimeout(() => connectWithRetry(attempt + 1), next);
   }
 }
 
-connectWithRetry();
+if (!MONGO_URI) {
+  console.warn('⚠️  MONGO_URI 미설정. DB 연결을 건너뜁니다 (/readyz는 NOT_READY 반환).');
+} else {
+  connectWithRetry();
+}
 
 mongoose.connection.on('disconnected', () => console.warn('⚠️ MongoDB disconnected'));
 mongoose.connection.on('reconnected',  () => console.log('🔁 MongoDB reconnected'));
@@ -156,8 +162,10 @@ const shutdown = async (sig) => {
   try {
     console.log(`\n👋 ${sig} received. Shutting down gracefully...`);
     server.close(() => console.log('🛑 HTTP server closed'));
-    await mongoose.connection.close();
-    console.log('🛑 MongoDB connection closed');
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.connection.close();
+      console.log('🛑 MongoDB connection closed');
+    }
     process.exit(0);
   } catch (e) {
     console.error('💥 Shutdown error:', e);
