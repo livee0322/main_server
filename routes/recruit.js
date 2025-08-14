@@ -1,73 +1,95 @@
-// routes/recruit.js (refactored, safe & front-compatible)
+// routes/recruit.js (refactored, flexible & front-compatible)
 const router = require('express').Router();
 const { body, validationResult, param, query } = require('express-validator');
 const Recruit = require('../models/Recruit');
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
 
-// Thumbnail transform (env overrideable)
-const THUMB =
-  process.env.CLOUDINARY_THUMB ||
-  'c_fill,g_auto,w_640,h_360,f_auto,q_auto';
+const THUMB = process.env.CLOUDINARY_THUMB || 'c_fill,g_auto,w_640,h_360,f_auto,q_auto';
+const MAX_SALE_MS = 3 * 60 * 60 * 1000; // 3시간
 
-/** Insert Cloudinary transform segment into URL */
+/** Cloudinary thumbnail helper */
 function toThumb(url) {
   if (!url) return '';
   try {
     const [h, t] = String(url).split('/upload/');
-    if (!t) return url; // not a cloudinary url
+    if (!t) return url; // non-cloudinary
     return `${h}/upload/${THUMB}/${t}`;
-  } catch {
-    return url;
-  }
+  } catch { return url; }
 }
 
-/** Normalize document → DTO for the frontend */
+/** Doc → DTO */
 function toDTO(doc) {
   const o = (doc?.toObject ? doc.toObject() : doc) || {};
   const id = o._id?.toString?.() || o.id;
   const imageUrl = o.imageUrl || o.thumbnailUrl || '';
   const thumbnailUrl = o.thumbnailUrl || toThumb(imageUrl) || '';
-  return {
-    ...o,
-    id,                // 편의상 id 보장
-    imageUrl,
-    thumbnailUrl,
-  };
+  return { ...o, id, imageUrl, thumbnailUrl };
 }
 
-/** Common error wrapper */
-const safe = (fn) => (req, res, next) =>
-  Promise.resolve(fn(req, res, next)).catch((e) => {
+/** async error guard */
+const safe = fn => (req, res, next) =>
+  Promise.resolve(fn(req, res, next)).catch(e => {
     console.error('[recruits] error:', e);
     return res.fail(e.message || '요청 처리 중 오류가 발생했습니다.', 'RECRUIT_ERROR', 500);
   });
 
-/* =========================
- *  목록 (전체, 페이지네이션)
- * ========================= */
+/** build find query from request */
+function buildFindQuery(req) {
+  const { type, q, hasImage } = req.query || {};
+  const $and = [];
+
+  // type filter
+  if (type && ['product', 'host', 'both'].includes(type)) {
+    $and.push({ type });
+  }
+
+  // basic text search (title, description)
+  if (q && String(q).trim()) {
+    const rx = new RegExp(String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    $and.push({ $or: [{ title: rx }, { description: rx }] });
+  }
+
+  // only items with image
+  if (hasImage === 'true') {
+    $and.push({ $or: [{ imageUrl: { $exists: true, $ne: '' } }, { thumbnailUrl: { $exists: true, $ne: '' } }] });
+  }
+
+  return $and.length ? { $and } : {};
+}
+
+/* =========================================================
+ * GET /recruits  — 목록 (필터 + 페이지네이션)
+ * =======================================================*/
 router.get(
   '/',
   [
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('limit').optional().isInt({ min: 1, max: 50 }).toInt(),
+    query('type').optional().isIn(['product', 'host', 'both']),
+    query('hasImage').optional().isIn(['true', 'false']),
+    query('sort').optional().isString(),
+    query('q').optional().isString()
   ],
   safe(async (req, res) => {
     const page = req.query.page || 1;
     const limit = req.query.limit || 20;
 
+    const findQuery = buildFindQuery(req);
+
+    // sort: default -createdAt, support: createdAt, -date, date
+    const sortKey = (req.query.sort || '-createdAt').trim();
+    const sort = {};
+    if (sortKey.startsWith('-')) sort[sortKey.slice(1)] = -1;
+    else sort[sortKey] = 1;
+
     const [docs, total] = await Promise.all([
-      Recruit.find({})
-        .sort({ createdAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
-        .lean(),
-      Recruit.countDocuments({}),
+      Recruit.find(findQuery).sort(sort).skip((page - 1) * limit).limit(limit).lean(),
+      Recruit.countDocuments(findQuery),
     ]);
 
-    const items = docs.map(toDTO);
     return res.ok({
-      items,
+      items: docs.map(toDTO),
       page,
       limit,
       total,
@@ -76,24 +98,22 @@ router.get(
   })
 );
 
-/* =========================
- *  내 공고
- * ========================= */
+/* =========================================================
+ * GET /recruits/mine — 내 공고
+ * =======================================================*/
 router.get(
   '/mine',
   auth,
   requireRole('brand', 'admin'),
   safe(async (req, res) => {
-    const docs = await Recruit.find({ user: req.user.id })
-      .sort({ createdAt: -1 })
-      .lean();
+    const docs = await Recruit.find({ user: req.user.id }).sort({ createdAt: -1 }).lean();
     return res.ok({ items: docs.map(toDTO) });
   })
 );
 
-/* =========================
- *  단건 조회 (수정 프리필용)
- * ========================= */
+/* =========================================================
+ * GET /recruits/:id — 단건 조회(수정 프리필)
+ * =======================================================*/
 router.get(
   '/:id',
   auth,
@@ -110,17 +130,33 @@ router.get(
   })
 );
 
-/* =========================
- *  생성 (브랜드 전용)
- * ========================= */
+/* =========================================================
+ * POST /recruits — 생성(브랜드)
+ *  - title 필수, 나머지 선택(형식 체크)
+ *  - products[].saleUntil 최대 3시간으로 캡핑
+ * =======================================================*/
 router.post(
   '/',
   auth,
   requireRole('brand'),
   [
-    body('title').isLength({ min: 1 }).withMessage('제목은 필수입니다.'),
-    body('date').isString().withMessage('촬영일은 필수입니다.'),
-    body('imageUrl').isString().withMessage('이미지 URL은 필수입니다.'),
+    body('title').isString().trim().isLength({ min: 1 }).withMessage('제목은 필수입니다.'),
+    body('type').optional().isIn(['product', 'host', 'both']),
+    body('date').optional().isString(), // YYYY-MM-DD (프론트가 문자열로 보냄)
+    body('time').optional().isString(),
+    body('location').optional().isString(),
+    body('imageUrl').optional().isString(),
+    body('description').optional().isString(),
+
+    // products 검증(간단)
+    body('products').optional().isArray(),
+    body('products.*.url').optional().isString(),
+    body('products.*.title').optional().isString(),
+    body('products.*.price').optional().isNumeric(),
+    body('products.*.salePrice').optional().isNumeric(),
+    body('products.*.thumbUrl').optional().isString(),
+    body('products.*.detailHtml').optional().isString(),
+    body('products.*.saleUntil').optional().isString(), // 프론트는 ISO or 계산된 값
   ],
   safe(async (req, res) => {
     const errors = validationResult(req);
@@ -129,7 +165,24 @@ router.post(
 
     const payload = { ...req.body, user: req.user.id };
 
-    // 서버에서 썸네일 캐시 필드 생성(선택)
+    // type 기본값
+    if (!['product', 'host', 'both'].includes(payload.type)) payload.type = 'product';
+
+    // saleUntil 서버 캡핑
+    if (Array.isArray(payload.products)) {
+      const now = Date.now();
+      payload.products = payload.products.map(p => {
+        const next = { ...p };
+        if (p.saleUntil) {
+          const untilMs = new Date(p.saleUntil).getTime();
+          const capped = Math.min(untilMs, now + MAX_SALE_MS);
+          next.saleUntil = isFinite(capped) ? new Date(capped) : undefined;
+        }
+        return next;
+      });
+    }
+
+    // 썸네일 캐시
     if (payload.imageUrl && !payload.thumbnailUrl) {
       payload.thumbnailUrl = toThumb(payload.imageUrl);
     }
@@ -139,20 +192,45 @@ router.post(
   })
 );
 
-/* =========================
- *  수정
- * ========================= */
+/* =========================================================
+ * PUT /recruits/:id — 수정(브랜드/관리자)
+ * =======================================================*/
 router.put(
   '/:id',
   auth,
   requireRole('brand', 'admin'),
-  [param('id').isMongoId()],
+  [
+    param('id').isMongoId(),
+    body('type').optional().isIn(['product', 'host', 'both']),
+    body('title').optional().isString().trim(),
+    body('date').optional().isString(),
+    body('time').optional().isString(),
+    body('location').optional().isString(),
+    body('imageUrl').optional().isString(),
+    body('description').optional().isString(),
+    body('products').optional().isArray(),
+  ],
   safe(async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty())
       return res.fail('유효성 오류', 'VALIDATION_FAILED', 422, { errors: errors.array() });
 
     const $set = { ...req.body };
+
+    // 캡핑 동일 적용
+    if (Array.isArray($set.products)) {
+      const now = Date.now();
+      $set.products = $set.products.map(p => {
+        const next = { ...p };
+        if (p.saleUntil) {
+          const untilMs = new Date(p.saleUntil).getTime();
+          const capped = Math.min(untilMs, now + MAX_SALE_MS);
+          next.saleUntil = isFinite(capped) ? new Date(capped) : undefined;
+        }
+        return next;
+      });
+    }
+
     if ($set.imageUrl && !$set.thumbnailUrl) $set.thumbnailUrl = toThumb($set.imageUrl);
 
     const updated = await Recruit.findOneAndUpdate(
@@ -168,9 +246,9 @@ router.put(
   })
 );
 
-/* =========================
- *  삭제
- * ========================= */
+/* =========================================================
+ * DELETE /recruits/:id — 삭제
+ * =======================================================*/
 router.delete(
   '/:id',
   auth,
@@ -189,9 +267,10 @@ router.delete(
   })
 );
 
-/* =========================
- *  일정 (today ~ +3)
- * ========================= */
+/* =========================================================
+ * GET /recruits/schedule — 오늘~+3일
+ * 프론트 위젯 호환용 필드만 최소 반환
+ * =======================================================*/
 router.get(
   '/schedule',
   safe(async (_req, res) => {
@@ -203,7 +282,7 @@ router.get(
       .limit(50)
       .lean();
 
-    const items = docs.map(toDTO).map((r) => ({
+    const items = docs.map(toDTO).map(r => ({
       _id: r._id || r.id,
       title: r.title,
       date: r.date,
