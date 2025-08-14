@@ -52,34 +52,52 @@ app.use((req, res, next) => {
 });
 
 /* ====== MongoDB ====== */
+/* ====== DB (Mongoose 7 + Node Driver 5) ====== */
 if (!process.env.MONGO_URI) {
-  console.warn('⚠️  MONGO_URI 가 설정되지 않았습니다. Render 환경변수를 확인하세요.');
+  console.warn('⚠️  MONGO_URI 가 설정되지 않았습니다. Render의 Environment Variables를 확인하세요.');
 }
+
+const MONGO_URI = process.env.MONGO_URI;
+const MONGO_OPTS = {
+  autoIndex: true,
+  // 최신 드라이버에서 keepAlive/keepAliveInitialDelay 제거됨
+  serverSelectionTimeoutMS: 10000, // 클러스터 선택 타임아웃
+  socketTimeoutMS: 45000,          // 소켓 타임아웃
+  maxPoolSize: 10,                 // 커넥션 풀
+  // 필요시: connectTimeoutMS: 20000,
+};
 
 mongoose.set('strictQuery', true);
 
-const connectWithRetry = async (attempt = 1) => {
-  const wait = Math.min(30000, 1000 * Math.pow(2, attempt)); // 1s,2s,4s..max 30s
+const MAX_RETRY   = Number(process.env.MONGO_MAX_RETRY ?? 10);
+const BASE_DELAY  = Number(process.env.MONGO_BASE_DELAY_MS ?? 2000); // 2s
+const JITTER_MS   = 500;
+
+async function connectWithRetry(attempt = 1) {
   try {
-    console.log(`🧲 Mongo connecting (attempt ${attempt})`);
-    await mongoose.connect(process.env.MONGO_URI, {
-      autoIndex: true,
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-      maxPoolSize: 10,
-      keepAlive: true,
-      keepAliveInitialDelay: 300000,
-    });
+    await mongoose.connect(MONGO_URI, MONGO_OPTS);
     console.log('✅ MongoDB connected');
   } catch (err) {
-    console.error(`❌ Mongo connect error: ${err.message}. retry in ${wait}ms`);
-    setTimeout(() => connectWithRetry(attempt + 1), wait);
+    const next = Math.min(
+      BASE_DELAY * Math.pow(2, attempt - 1) + Math.floor(Math.random() * JITTER_MS),
+      60_000 // 최대 60초
+    );
+    console.error(`❌ Mongo connect error (attempt ${attempt}):`, err.message);
+    if (attempt >= MAX_RETRY) {
+      console.error('💥 Reached max retry attempts. Exiting.');
+      process.exit(1);
+      return;
+    }
+    console.log(`⏳ retrying in ${Math.round(next / 1000)}s...`);
+    setTimeout(() => connectWithRetry(attempt + 1), next);
   }
-};
+}
+
 connectWithRetry();
 
 mongoose.connection.on('disconnected', () => console.warn('⚠️ MongoDB disconnected'));
 mongoose.connection.on('reconnected',  () => console.log('🔁 MongoDB reconnected'));
+mongoose.connection.on('error', (e) => console.error('🛑 Mongo error:', e.message));
 
 /* ====== Health & Meta ====== */
 const stateName = (s) => ({0:'disconnected',1:'connected',2:'connecting',3:'disconnecting'}[s] || String(s));
