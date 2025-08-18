@@ -1,4 +1,4 @@
-// index.js (stable + reconnect + campaigns suite)
+// index.js (stable + reconnect + campaigns suite, no duplicate mounts)
 require('dotenv').config();
 const express  = require('express');
 const cors     = require('cors');
@@ -16,7 +16,6 @@ app.use(express.json({ limit: JSON_LIMIT }));
 if (!process.env.MONGO_URI) {
   console.warn('⚠️ MONGO_URI 가 설정되지 않았습니다. Render 환경변수를 확인하세요.');
 }
-
 mongoose.set('strictQuery', true);
 
 const connectDB = async () => {
@@ -30,30 +29,18 @@ const connectDB = async () => {
     console.log('✅ MongoDB connected');
   } catch (err) {
     console.error('❌ MongoDB connect error:', err.message);
-    setTimeout(connectDB, 5000); // 5초 후 재시도
+    setTimeout(connectDB, 5000);
   }
 };
-
 connectDB();
-
-// 연결 이벤트 로그
-mongoose.connection.on('disconnected', () => {
-  console.warn('⚠️ MongoDB disconnected. 재연결 시도...');
-  connectDB();
-});
-mongoose.connection.on('reconnected', () => {
-  console.log('🔁 MongoDB reconnected');
-});
+mongoose.connection.on('disconnected', () => { console.warn('⚠️ MongoDB disconnected. 재연결 시도...'); connectDB(); });
+mongoose.connection.on('reconnected',  () => console.log('🔁 MongoDB reconnected'));
 
 /* ===== 응답 헬퍼 ===== */
 app.use((req, res, next) => {
   res.ok = (data = {}, status = 200) => res.status(status).json({ ok: true, ...data });
-  res.fail = (
-    message = '요청을 처리할 수 없습니다.',
-    code = 'INTERNAL_ERROR',
-    status = 400,
-    extra = {}
-  ) => res.status(status).json({ ok: false, code, message, ...extra });
+  res.fail = (message = '요청을 처리할 수 없습니다.', code = 'INTERNAL_ERROR', status = 400, extra = {}) =>
+    res.status(status).json({ ok: false, code, message, ...extra });
   next();
 });
 
@@ -68,29 +55,22 @@ app.use('/api/auth',      require('./routes/user'));
 app.use('/api/portfolio', require('./routes/portfolio'));
 app.use('/api/recruit',   require('./routes/recruit'));
 
-/* ===== 라우터 (신규 캠페인 스위트) =====
-   - /campaigns : 캠페인 CRUD (product/recruit 통합)
-   - /campaigns/:cid/applications : 지원서
-   - /scrape/product?url=... : 오픈마켓 메타 스크랩
-   - /t/:cid, /px.gif : 클릭/뷰 트래킹
-   - /recruits (compat): 기존 프론트의 /recruits 호출을 캠페인 recruit로 매핑
-*/
-app.use(`${BASE_PATH}/campaigns`,    require('./routes/campaigns'));
-app.use(`${BASE_PATH}`,              require('./routes/applications')); // 내부에서 /campaigns/:cid/applications, /applications/:id
-app.use(`${BASE_PATH}/scrape`,       require('./routes/scrape'));
-app.use(`${BASE_PATH}`,              require('./routes/track'));
-app.use(`${BASE_PATH}/recruits`,     require('./routes/recruits-compat')); // 호환 레이어
+/* ===== 라우터 (캠페인 스위트) ===== */
+app.use(`${BASE_PATH}/campaigns`,   require('./routes/campaigns'));
+app.use(`${BASE_PATH}`,             require('./routes/applications')); // 내부에서 /campaigns/:cid/applications 등 정의
+app.use(`${BASE_PATH}/scrape`,      require('./routes/scrape'));
+app.use(`${BASE_PATH}`,             require('./routes/track'));
+
+// ⚠️ 호환 레이어는 경로 분리 (중복 mount 방지)
+app.use(`${BASE_PATH}/recruits-compat`, require('./routes/recruits-compat'));
 
 /* ===== 헬스체크 ===== */
 const stateName = (s) => ({0:'disconnected',1:'connected',2:'connecting',3:'disconnecting'}[s] || String(s));
-
 app.get('/', (_req, res) => res.send('✅ Livee Main Server is running!'));
-
 app.get('/healthz', (_req, res) => {
   const dbState = mongoose.connection.readyState;
   res.ok({ dbState, dbStateName: stateName(dbState), uptime: process.uptime() });
 });
-
 app.get('/readyz', (_req, res) => {
   const dbState = mongoose.connection.readyState;
   if (dbState === 1) return res.ok({ db: 'connected' });
