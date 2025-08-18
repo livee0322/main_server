@@ -1,18 +1,19 @@
-{
+"{
   "name": "livee-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "main": "index.js",
   "type": "commonjs",
+  "main": "src/index.js",
   "engines": { "node": ">=18" },
   "scripts": {
-    "start": "node index.js",
-    "dev": "NODE_ENV=development node index.js",
+    "start": "node src/index.js",
     "build": "echo \"no build step for server\"",
-    "postinstall": "node -e \"console.log('postinstall skipped')\""
+    "postinstall": "node -e \"console.log('postinstall ok')\""
   },
   "dependencies": {
+    "axios": "^1.7.7",
     "bcryptjs": "^2.4.3",
+    "cheerio": "^1.0.0",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -20,7 +21,6 @@
     "express-validator": "^7.0.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.5.1",
-    "sanitize-html": "^2.13.0",
-    "cheerio": "^1.0.0"
+    "sanitize-html": "^2.13.0"
   }
 }
