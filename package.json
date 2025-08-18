@@ -2,13 +2,13 @@
   "name": "livee-server",
   "version": "1.0.0",
   "private": true,
-  "type": "commonjs",
   "main": "index.js",
+  "type": "commonjs",
   "engines": { "node": ">=18" },
   "scripts": {
     "start": "node index.js",
-    "build": "echo \"no build step for server\"",
-    "postinstall": "npm ci --only=production || echo 'postinstall skipped'"
+    "render-build": "npm install --omit=dev",
+    "build": "echo \"no build step\""
   },
   "dependencies": {
     "axios": "^1.7.4",
