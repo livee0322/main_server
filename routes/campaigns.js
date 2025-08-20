@@ -1,9 +1,10 @@
-// /// /routes/campaigns.js
+// /routes/campaigns.js
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
 const sanitizeHtml = require('sanitize-html');
+const mongoose = require('mongoose');                 // ✅ 추가
 const Campaign = require('../models/Campaign');
-const auth = require('../src/middleware/auth');           // ✅ 인증
+const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
 
 const THUMB = process.env.CLOUDINARY_THUMB || 'c_fill,g_auto,w_640,h_360,f_auto,q_auto';
@@ -26,9 +27,33 @@ const sanitize = (html) =>
     allowedSchemes: ['http','https','data','mailto','tel'],
   });
 
-/* ---------------------------------------
- * Create
- * ------------------------------------- */
+/* -------------------------------
+ * ✅ META (항상 :id 보다 위에!)
+ * ----------------------------- */
+router.get('/meta', async (req, res) => {
+  // 고정 카테고리(필요시 .env/DB로 대체)
+  const productCats = ['뷰티','가전','음식','패션','리빙','생활','디지털'];
+  const recruitCats = ['뷰티','가전','음식','패션','리빙','일반'];
+
+  // 간단 브랜드 집계(선택)
+  const brands = await Campaign.aggregate([
+    { $match: { brand: { $exists: true, $ne: '' } } },
+    { $group: { _id: '$brand', count: { $sum: 1 } } },
+    { $project: { _id: 0, name: '$_id', count: 1 } },
+    { $sort: { count: -1, name: 1 } },
+    { $limit: 50 },
+  ]).catch(() => []);
+
+  return res.ok({
+    data: {
+      categories: { product: productCats, recruit: recruitCats },
+      brands,
+      updatedAt: new Date().toISOString(),
+    }
+  });
+});
+
+/* Create */
 router.post('/',
   auth, requireRole('brand','admin'),
   body('type').isIn(['product','recruit']),
@@ -48,9 +73,7 @@ router.post('/',
   }
 );
 
-/* ---------------------------------------
- * List
- * ------------------------------------- */
+/* List */
 router.get('/',
   query('type').optional().isIn(['product','recruit']),
   query('status').optional().isIn(['draft','scheduled','published','closed']),
@@ -70,19 +93,21 @@ router.get('/',
   }
 );
 
-/* ---------------------------------------
- * Mine (내가 만든 캠페인)
- * ------------------------------------- */
+/* Mine (내가 만든 캠페인) */
 router.get('/mine', auth, requireRole('brand','admin'), async (req, res) => {
   const docs = await Campaign.find({ createdBy: req.user.id }).sort({ createdAt:-1 });
   return res.ok({ items: docs.map(toDTO) });
 });
 
-/* ---------------------------------------
- * Read (인증 필요)
- * ------------------------------------- */
+/* Read (인증 필수)
+ * ✅ ObjectId 검증 추가하여 'meta' 같은 문자열이 여기로 들어오지 않게 함
+ */
 router.get('/:id', auth, async (req, res) => {
-  const c = await Campaign.findById(req.params.id);
+  const { id } = req.params;
+  if (!mongoose.isValidObjectId(id)) {
+    return res.fail('INVALID_ID','INVALID_ID',400);
+  }
+  const c = await Campaign.findById(id);
   if (!c) return res.fail('NOT_FOUND','NOT_FOUND',404);
 
   const isOwner = req.user && String(c.createdBy) === req.user.id;
@@ -92,115 +117,31 @@ router.get('/:id', auth, async (req, res) => {
   return res.ok({ data: toDTO(c) });
 });
 
-/* ---------------------------------------
- * Update
- * ------------------------------------- */
+/* Update */
 router.put('/:id', auth, requireRole('brand','admin'), async (req, res) => {
+  const { id } = req.params;
+  if (!mongoose.isValidObjectId(id)) return res.fail('INVALID_ID','INVALID_ID',400);
+
   const $set = { ...req.body };
   if ($set.coverImageUrl && !$set.thumbnailUrl) $set.thumbnailUrl = toThumb($set.coverImageUrl);
   if ($set.descriptionHTML) $set.descriptionHTML = sanitize($set.descriptionHTML);
 
   const updated = await Campaign.findOneAndUpdate(
-    { _id: req.params.id, createdBy: req.user.id },
+    { _id: id, createdBy: req.user.id },
     { $set }, { new:true }
   );
   if (!updated) return res.fail('REJECTED','RECRUIT_FORBIDDEN_EDIT',403);
   return res.ok({ data: toDTO(updated) });
 });
 
-/* ---------------------------------------
- * Delete
- * ------------------------------------- */
+/* Delete */
 router.delete('/:id', auth, requireRole('brand','admin'), async (req, res) => {
-  const removed = await Campaign.findOneAndDelete({ _id: req.params.id, createdBy: req.user.id });
+  const { id } = req.params;
+  if (!mongoose.isValidObjectId(id)) return res.fail('INVALID_ID','INVALID_ID',400);
+
+  const removed = await Campaign.findOneAndDelete({ _id: id, createdBy: req.user.id });
   if (!removed) return res.fail('NOT_FOUND_OR_FORBIDDEN','RECRUIT_FORBIDDEN_DELETE',403);
   return res.ok({ message:'삭제 완료' });
-});
-
-/* ========================================================================
- * 🔽 메타 엔드포인트 (카테고리/브랜드) — meta.js 없이 campaigns.js에 추가
- * ====================================================================== */
-
-/**
- * 기본 카테고리(환경변수로 덮어쓰기 가능)
- * - PRODUCT_CATEGORIES="뷰티,패션,가전,식품,생활,디지털,스포츠,반려"
- * - RECRUIT_CATEGORIES="뷰티,패션,가전,식품,리빙,유아,헬스,취미"
- */
-const DEFAULT_PRODUCT_CATEGORIES = (process.env.PRODUCT_CATEGORIES || '뷰티,가전,식품,패션,생활,디지털,스포츠,반려')
-  .split(',').map(s=>s.trim()).filter(Boolean);
-const DEFAULT_RECRUIT_CATEGORIES  = (process.env.RECRUIT_CATEGORIES || '뷰티,가전,식품,리빙,유아,헬스,취미,패션')
-  .split(',').map(s=>s.trim()).filter(Boolean);
-
-/** 헬퍼: DB에서 distinct + count 집계 */
-async function distinctCounts(paths = []) {
-  // paths: 예) ['brand', 'recruit.brand']
-  const or = paths.map(p => ({ [p]: { $exists:true, $ne:null } }));
-  const pipeline = [
-    { $match: { $or: or } },
-    { $project: {
-        v: {
-          $trim: {
-            input: { $toString:
-              { $ifNull: paths.slice(1).reduce((acc,p)=>({ $ifNull:[acc, `$${p}`] }), `$${paths[0]}`), '' }
-            }
-          }
-        }
-      }
-    },
-    { $match: { v: { $ne: '' } } },
-    { $group: { _id: { $toLower:'$v' }, name: { $first:'$v' }, count: { $sum:1 } } },
-    { $sort: { count:-1, name:1 } },
-    { $limit: 100 }
-  ];
-  return Campaign.aggregate(pipeline);
-}
-
-/** GET /campaigns/meta  → 양쪽 카테고리 + 인기 브랜드(최대 50) 한 번에 */
-router.get('/meta', async (req, res) => {
-  const [brandAgg, prodCatAgg, recCatAgg] = await Promise.all([
-    distinctCounts(['brand','recruit.brand']),
-    distinctCounts(['category']),
-    distinctCounts(['recruit.category'])
-  ]);
-
-  // DB에 저장된 카테고리 + 기본 카테고리 병합(중복 제거)
-  const uniq = (arr) => Array.from(new Map(arr.map(n => [String(n).toLowerCase(), String(n)])).values());
-  const prodCats = uniq([...DEFAULT_PRODUCT_CATEGORIES, ...prodCatAgg.map(x=>x.name)]);
-  const recCats  = uniq([...DEFAULT_RECRUIT_CATEGORIES,  ...recCatAgg.map(x=>x.name)]);
-
-  return res.ok({
-    data: {
-      categories: { product: prodCats, recruit: recCats },
-      brands: brandAgg.slice(0,50).map(b => ({ name:b.name, count:b.count })),
-    }
-  });
-});
-
-/** GET /campaigns/meta/categories?type=product|recruit  */
-router.get('/meta/categories', async (req, res) => {
-  const type = (req.query.type || '').toLowerCase();
-  const [prodCatAgg, recCatAgg] = await Promise.all([
-    distinctCounts(['category']),
-    distinctCounts(['recruit.category'])
-  ]);
-  const uniq = (arr) => Array.from(new Map(arr.map(n => [String(n).toLowerCase(), String(n)])).values());
-  const prodCats = uniq([...DEFAULT_PRODUCT_CATEGORIES, ...prodCatAgg.map(x=>x.name)]);
-  const recCats  = uniq([...DEFAULT_RECRUIT_CATEGORIES,  ...recCatAgg.map(x=>x.name)]);
-
-  const data = type === 'product' ? prodCats
-             : type === 'recruit' ? recCats
-             : { product: prodCats, recruit: recCats };
-
-  return res.ok({ data });
-});
-
-/** GET /campaigns/meta/brands?q=검색어  → 최근 캠페인에서 추출한 브랜드 */
-router.get('/meta/brands', async (req, res) => {
-  const q = (req.query.q || '').trim().toLowerCase();
-  const agg = await distinctCounts(['brand','recruit.brand']); // name,count
-  let list = agg.map(x => ({ name:x.name, count:x.count }));
-  if (q) list = list.filter(b => b.name.toLowerCase().includes(q));
-  return res.ok({ data: list.slice(0,50) });
 });
 
 module.exports = router;
