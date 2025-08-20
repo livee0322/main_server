@@ -77,19 +77,72 @@ router.post('/',
 router.get('/',
   query('type').optional().isIn(['product','recruit']),
   query('status').optional().isIn(['draft','scheduled','published','closed']),
+  // recruit 전용 쿼리: today / dateFrom / dateTo / timeFrom / timeTo / sort
+  query('today').optional().isIn(['0','1','true','false']),
+  query('dateFrom').optional().isString(),
+  query('dateTo').optional().isString(),
+  query('timeFrom').optional().isString(),
+  query('timeTo').optional().isString(),
+  query('sort').optional().isIn(['latest','schedule','soon']),
   async (req, res) => {
     const page  = Math.max(parseInt(req.query.page||'1'),1);
     const limit = Math.min(parseInt(req.query.limit||'20'), 50);
+
     const q = {};
-    if (req.query.type) q.type = req.query.type;
+    if (req.query.type)   q.type = req.query.type;
     if (req.query.status) q.status = req.query.status;
-    if (req.query.q) q.title = { $regex: String(req.query.q), $options: 'i' };
+    if (req.query.q)      q.title = { $regex: String(req.query.q), $options: 'i' };
+
+    // ---------- recruit 전용 필터 ----------
+    const isRecruit = req.query.type === 'recruit';
+    if (isRecruit) {
+      const todayOnly = ['1','true'].includes(String(req.query.today||'0').toLowerCase());
+      const dateFrom  = (req.query.dateFrom || '').trim();
+      const dateTo    = (req.query.dateTo   || '').trim();
+      const timeFrom  = (req.query.timeFrom || '').trim();
+      const timeTo    = (req.query.timeTo   || '').trim();
+
+      // 날짜 범위 (문자열 비교 안전: YYYY-MM-DD)
+      const dateCond = {};
+      if (todayOnly) {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth()+1).padStart(2,'0');
+        const d = String(now.getDate()).padStart(2,'0');
+        const ymd = `${y}-${m}-${d}`;
+        dateCond.$gte = ymd; dateCond.$lte = ymd;
+      } else {
+        if (dateFrom) dateCond.$gte = dateFrom;
+        if (dateTo)   dateCond.$lte = dateTo;
+      }
+      if (Object.keys(dateCond).length) q['recruit.date'] = dateCond;
+
+      // 시간 범위 (문자열 비교 안전: HH:mm)
+      const timeCond = {};
+      if (timeFrom) timeCond.$gte = timeFrom;
+      if (timeTo)   timeCond.$lte = timeTo;
+      if (Object.keys(timeCond).length) q['recruit.timeStart'] = timeCond;
+    }
+
+    // ---------- 정렬 ----------
+    // 기본: 최신순
+    let sort = { createdAt: -1 };
+    // schedule/soon: 스케줄 가까운 순(날짜 오름차, 시간 오름차)
+    if (isRecruit && (req.query.sort === 'schedule' || req.query.sort === 'soon')) {
+      sort = { 'recruit.date': 1, 'recruit.timeStart': 1, createdAt: -1 };
+    } else if (req.query.sort === 'latest') {
+      sort = { createdAt: -1 };
+    }
 
     const [items,total] = await Promise.all([
-      Campaign.find(q).sort({ createdAt:-1 }).skip((page-1)*limit).limit(limit),
+      Campaign.find(q).sort(sort).skip((page-1)*limit).limit(limit),
       Campaign.countDocuments(q),
     ]);
-    return res.ok({ items: items.map(toDTO), page, limit, total, totalPages: Math.ceil(total/limit) });
+
+    return res.ok({
+      items: items.map(toDTO),
+      page, limit, total, totalPages: Math.ceil(total/limit)
+    });
   }
 );
 
