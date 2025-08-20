@@ -1,8 +1,9 @@
+// /routes/campaigns.js
 const router = require('express').Router();
-const { body, query, param, validationResult } = require('express-validator');
+const { body, query, validationResult } = require('express-validator');
 const sanitizeHtml = require('sanitize-html');
 const Campaign = require('../models/Campaign');
-const auth = require('../src/middleware/auth');
+const auth = require('../src/middleware/auth');           // ✅ 인증
 const requireRole = require('../src/middleware/requireRole');
 
 const THUMB = process.env.CLOUDINARY_THUMB || 'c_fill,g_auto,w_640,h_360,f_auto,q_auto';
@@ -65,14 +66,14 @@ router.get('/',
   }
 );
 
-/* Mine */
+/* Mine (내가 만든 캠페인) */
 router.get('/mine', auth, requireRole('brand','admin'), async (req, res) => {
   const docs = await Campaign.find({ createdBy: req.user.id }).sort({ createdAt:-1 });
   return res.ok({ items: docs.map(toDTO) });
 });
 
-/* Read (owner or published) */
-router.get('/:id', async (req, res) => {
+/* Read (인증 필수로 변경) */
+router.get('/:id', auth, async (req, res) => {     // ✅ auth 추가
   const c = await Campaign.findById(req.params.id);
   if (!c) return res.fail('NOT_FOUND','NOT_FOUND',404);
 
