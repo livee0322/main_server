@@ -56,10 +56,10 @@ app.use('/api/portfolio', require('./routes/portfolio'));
 app.use('/api/recruit',   require('./routes/recruit'));
 
 /* ===== 라우터 (캠페인 스위트) ===== */
-app.use(`${BASE_PATH}/campaigns`,   require('./routes/campaigns'));
-app.use(`${BASE_PATH}`,             require('./routes/applications')); // 내부에서 /campaigns/:cid/applications 등 정의
-app.use(`${BASE_PATH}/scrape`,      require('./routes/scrape'));
-app.use(`${BASE_PATH}`,             require('./routes/track'));
+app.use(`${BASE_PATH}/campaigns`,     require('./routes/campaigns'));     // /campaigns, /campaigns/meta ...
+app.use(`${BASE_PATH}/applications`,  require('./routes/applications'));  // /applications, /applications/mine ...
+app.use(`${BASE_PATH}/scrape`,        require('./routes/scrape'));
+app.use(`${BASE_PATH}/track`,         require('./routes/track'));
 
 // ⚠️ 호환 레이어는 경로 분리 (중복 mount 방지)
 app.use(`${BASE_PATH}/recruits-compat`, require('./routes/recruits-compat'));
