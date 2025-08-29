@@ -1,8 +1,9 @@
-// routes/user.js
+// routes/user.js (Refactored - Auth Middleware Standardized)
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const auth = require('../src/middleware/auth'); // 표준 인증 미들웨어를 불러옵니다.
 
 const router = express.Router();
 
@@ -13,22 +14,8 @@ if (!JWT_SECRET) {
   console.warn('[users] JWT_SECRET not set – set process.env.JWT_SECRET');
 }
 
-/** 공통: Authorization 헤더 검사 */
-function requireAuth(req, res, next) {
-  try {
-    const h = req.headers.authorization || '';
-    const token = h.startsWith('Bearer ') ? h.slice(7) : '';
-    if (!token) {
-      return res.status(401).json({ ok:false, code:'NO_TOKEN', message:'인증 토큰이 없습니다.' });
-    }
-    const payload = jwt.verify(token, JWT_SECRET);
-    req.userId = payload.id;
-    req.userRole = payload.role;
-    next();
-  } catch (err) {
-    return res.status(401).json({ ok:false, code:'INVALID_TOKEN', message:'유효하지 않은 토큰입니다.' });
-  }
-}
+// /** 공통: Authorization 헤더 검사 */ <- 이 함수는 이제 삭제됩니다.
+// function requireAuth(req, res, next) { ... }
 
 /**
  * POST /api/v1/users/signup
@@ -108,9 +95,10 @@ router.post('/login', async (req, res) => {
  * header: Authorization: Bearer <JWT>
  * res: { ok:true, id, name, role }
  */
-router.get('/me', requireAuth, async (req, res) => {
+router.get('/me', auth, async (req, res) => { // 자체 'requireAuth' 대신 표준 'auth' 미들웨어를 사용합니다.
   try {
-    const u = await User.findById(req.userId).select('_id name role');
+    // 표준 미들웨어는 req.user에 정보를 담아주므로, req.userId 대신 req.user.id를 사용합니다.
+    const u = await User.findById(req.user.id).select('_id name role');
     if (!u) return res.status(404).json({ ok:false, code:'NOT_FOUND', message:'사용자를 찾을 수 없습니다.' });
     return res.json({ ok:true, id: u._id.toString(), name: u.name, role: u.role });
   } catch (err) {
