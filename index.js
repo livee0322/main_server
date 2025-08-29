@@ -1,10 +1,10 @@
-// index.js (stable + reconnect + campaigns suite, no duplicate mounts)
+// index.js (Refactored - Model Unified)
 require('dotenv').config();
 const express  = require('express');
 const cors     = require('cors');
 const mongoose = require('mongoose');
 const swaggerUi = require('swagger-ui-express');
-const swaggerSpec = require('./swaggerDef'); // swaggerDef.js 파일에서 설정을 가져옵니다.
+const swaggerSpec = require('./swaggerDef');
 
 const app = express();
 
@@ -15,7 +15,6 @@ app.use(cors());
 app.use(express.json({ limit: JSON_LIMIT }));
 
 /* ===== Swagger 설정 (운영 환경에서는 비활성화) ===== */
-// NODE_ENV가 'production'이 아닐 때만 API 문서를 활성화합니다.
 if (process.env.NODE_ENV !== 'production') {
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   console.log('✅ Swagger API docs available at /api-docs');
@@ -53,25 +52,19 @@ app.use((req, res, next) => {
   next();
 });
 
-/* ===== 라우터 (기존) ===== */
+/* ===== 라우터 ===== */
 app.use(`${BASE_PATH}/uploads`,    require('./routes/uploads'));
 app.use(`${BASE_PATH}/users`,      require('./routes/user'));
 app.use(`${BASE_PATH}/portfolios`, require('./routes/portfolio'));
-app.use(`${BASE_PATH}/recruits`,   require('./routes/recruit')); // 기존 엔드포인트 유지
-
-// 구버전 호환
-app.use('/api/auth',      require('./routes/user'));
-app.use('/api/portfolio', require('./routes/portfolio'));
-app.use('/api/recruit',   require('./routes/recruit'));
-
-/* ===== 라우터 (캠페인 스위트) ===== */
-app.use(`${BASE_PATH}/campaigns`,     require('./routes/campaigns'));     // /campaigns, /campaigns/meta ...
-app.use(`${BASE_PATH}/applications`,  require('./routes/applications'));  // /applications, /applications/mine ...
+app.use(`${BASE_PATH}/campaigns`,  require('./routes/campaigns')); // 통합된 campaigns 라우터
+app.use(`${BASE_PATH}/applications`,  require('./routes/applications'));
 app.use(`${BASE_PATH}/scrape`,        require('./routes/scrape'));
 app.use(`${BASE_PATH}/track`,         require('./routes/track'));
 
-// ⚠️ 호환 레이어는 경로 분리 (중복 mount 방지)
-app.use(`${BASE_PATH}/recruits-compat`, require('./routes/recruits-compat'));
+// 구버전 호환 라우터
+app.use('/api/auth',      require('./routes/user'));
+app.use('/api/portfolio', require('./routes/portfolio'));
+// '/api/recruit'는 이제 '/api/v1/campaigns?type=recruit'로 대체되었으므로 삭제합니다.
 
 /* ===== 헬스체크 ===== */
 const stateName = (s) => ({0:'disconnected',1:'connected',2:'connecting',3:'disconnecting'}[s] || String(s));

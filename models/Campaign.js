@@ -1,6 +1,8 @@
+// models/Campaign.js
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
+// Product 스키마에 detailHtml 추가 (Recruit 모델 호환)
 const ProductItemSchema = new Schema({
   url: { type: String, required: true },
   marketplace: { type: String, enum: ['smartstore', 'coupang', 'gmarket', 'etc'], default: 'smartstore' },
@@ -12,6 +14,7 @@ const ProductItemSchema = new Schema({
   imageUrl: String,
   deepLink: String,
   utm: { source: String, medium: String, campaign: String },
+  detailHtml: String, // Recruit 모델의 Product 스키마와 호환을 위해 추가
 }, { _id: true });
 
 const QuestionSchema = new Schema({
@@ -39,17 +42,19 @@ const CampaignSchema = new Schema({
   publishAt: Date,
   closeAt: Date,
 
-  // 상품형
+  // 상품 정보 (이제 'recruit' 타입도 상품을 가질 수 있음)
   products: [ProductItemSchema],
 
-  // 모집형
+  // 모집형 상세 정보
   recruit: {
+    // Recruit 모델의 필드들을 통합
+    recruitType: { type: String, enum:['product','host','both'], default:'product' }, // 구 Recruit 모델의 type
     location: String,
     shootDate: Date,
     shootTime: String,
     pay: String,
     payNegotiable: { type: Boolean, default: false },
-    requirements: String,
+    requirements: String, // Recruit 모델의 description과 호환
     preferred: String,
     questions: [QuestionSchema],
   },
