@@ -3,6 +3,8 @@ require('dotenv').config();
 const express  = require('express');
 const cors     = require('cors');
 const mongoose = require('mongoose');
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./swaggerDef'); // swaggerDef.js 파일에서 설정을 가져옵니다.
 
 const app = express();
 
@@ -11,6 +13,13 @@ const BASE_PATH  = process.env.API_BASE_PATH || '/api/v1';
 const JSON_LIMIT = process.env.JSON_LIMIT || '1mb';
 app.use(cors());
 app.use(express.json({ limit: JSON_LIMIT }));
+
+/* ===== Swagger 설정 (운영 환경에서는 비활성화) ===== */
+// NODE_ENV가 'production'이 아닐 때만 API 문서를 활성화합니다.
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  console.log('✅ Swagger API docs available at /api-docs');
+}
 
 /* ===== MongoDB 연결 ===== */
 if (!process.env.MONGO_URI) {
