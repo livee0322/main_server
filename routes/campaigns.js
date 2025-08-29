@@ -1,24 +1,14 @@
-// /routes/campaigns.js
+// /routes/campaigns.js (Refactored - Utilities Centralized)
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
 const sanitizeHtml = require('sanitize-html');
 const mongoose = require('mongoose');
-const Campaign = require('../models/Campaign'); // 통합된 Campaign 모델 사용
+const Campaign = require('../models/Campaign');
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
+const { toThumb, toDTO } = require('../src/utils/common'); // 1. 공통 유틸리티 함수 불러오기
 
-const THUMB = process.env.CLOUDINARY_THUMB || 'c_fill,g_auto,w_640,h_360,f_auto,q_auto';
-const toThumb = (url='') => {
-  try { const [h,t]=String(url).split('/upload/'); return t ? `${h}/upload/${THUMB}/${t}` : url; }
-  catch { return url; }
-};
-
-const toDTO = (doc) => {
-  const o = (doc?.toObject ? doc.toObject() : doc) || {};
-  const imageUrl = o.coverImageUrl || o.thumbnailUrl || '';
-  const thumbnailUrl = o.thumbnailUrl || toThumb(imageUrl) || '';
-  return { ...o, imageUrl, thumbnailUrl, id: o._id?.toString?.() || o.id };
-};
+// 2. 파일 내에 중복으로 정의되어 있던 toThumb, toDTO 함수는 삭제되었습니다.
 
 const sanitize = (html) =>
   sanitizeHtml(html || '', {
@@ -27,9 +17,7 @@ const sanitize = (html) =>
     allowedSchemes: ['http','https','data','mailto','tel'],
   });
 
-/* -------------------------------
- * ✅ META (항상 :id 보다 위에!)
- * ----------------------------- */
+/* Meta */
 router.get('/meta', async (req, res) => {
   const productCats = ['뷰티','가전','음식','패션','리빙','생활','디지털'];
   const recruitCats = ['뷰티','가전','음식','패션','리빙','일반'];
@@ -97,7 +85,7 @@ router.get('/',
   }
 );
 
-/* Mine (내가 만든 캠페인) */
+/* Mine */
 router.get('/mine', auth, requireRole('brand','admin'), async (req, res) => {
   const docs = await Campaign.find({ createdBy: req.user.id }).sort({ createdAt:-1 });
   return res.ok({ items: docs.map(toDTO) });
