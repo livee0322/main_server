@@ -1,11 +1,15 @@
+// routes/portfolio.js (Refactored - Error Handling & Response Standardized)
 const router = require('express').Router();
 const { body, validationResult } = require('express-validator');
 const Portfolio = require('../models/Portfolio');
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
+const asyncHandler = require('../src/middleware/asyncHandler'); // 1. 비동기 핸들러 불러오기
+
+// 2. 모든 API 핸들러를 asyncHandler로 감싸고, 응답을 res.ok/res.fail로 통일합니다.
 
 // 공개 리스트 (홈/리스트)
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const page = Math.max(parseInt(req.query.page||'1'),1);
   const limit = Math.min(parseInt(req.query.limit||'20'), 50);
   const items = await Portfolio.find({ isPublic: true })
@@ -14,20 +18,20 @@ router.get('/', async (req, res) => {
     .limit(limit)
     .select('name profileImage introText jobTag region experienceYears isPublic');
   return res.ok({ items });
-});
+}));
 
 // 내 포트폴리오 조회
-router.get('/mine', auth, requireRole('showhost','brand','admin'), async (req, res) => {
+router.get('/mine', auth, requireRole('showhost','brand','admin'), asyncHandler(async (req, res) => {
   const doc = await Portfolio.findOne({ user: req.user.id });
   if (!doc) return res.fail('포트폴리오가 없습니다.', 'PORTFOLIO_NOT_FOUND', 404);
   return res.ok({ data: doc });
-});
+}));
 
 // 생성 (쇼호스트 전용)
 router.post('/',
   auth, requireRole('showhost'),
   body('name').isLength({ min: 1 }),
-  async (req, res) => {
+  asyncHandler(async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.fail('유효성 오류', 'VALIDATION_FAILED', 422, { errors: errors.array() });
 
@@ -37,11 +41,11 @@ router.post('/',
     const payload = { ...req.body, user: req.user.id };
     const created = await Portfolio.create(payload);
     return res.ok({ message: '포트폴리오 생성', data: created }, 201);
-  }
+  })
 );
 
 // 수정
-router.put('/:id', auth, requireRole('showhost','admin'), async (req, res) => {
+router.put('/:id', auth, requireRole('showhost','admin'), asyncHandler(async (req, res) => {
   const updated = await Portfolio.findOneAndUpdate(
     { _id: req.params.id, user: req.user.id },
     { $set: req.body },
@@ -49,13 +53,13 @@ router.put('/:id', auth, requireRole('showhost','admin'), async (req, res) => {
   );
   if (!updated) return res.fail('수정 권한이 없거나 존재하지 않습니다.', 'PORTFOLIO_FORBIDDEN_EDIT', 403);
   return res.ok({ message: '수정 완료', data: updated });
-});
+}));
 
 // 삭제 (내 포트폴리오)
-router.delete('/mine', auth, requireRole('showhost','admin'), async (req, res) => {
+router.delete('/mine', auth, requireRole('showhost','admin'), asyncHandler(async (req, res) => {
   const removed = await Portfolio.findOneAndDelete({ user: req.user.id });
   if (!removed) return res.fail('삭제할 포트폴리오가 없습니다.', 'PORTFOLIO_NOT_FOUND', 404);
   return res.ok({ message: '삭제 완료' });
-});
+}));
 
 module.exports = router;
