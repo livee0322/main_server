@@ -66,6 +66,9 @@ app.use('/api/auth',      require('./routes/user'));
 app.use('/api/portfolio', require('./routes/portfolio'));
 // '/api/recruit'는 이제 '/api/v1/campaigns?type=recruit'로 대체되었으므로 삭제합니다.
 
+// 태웅이 테스트 
+app.use(`${BASE_PATH}/recruit-test`, require('./routes/recruit-test'));
+
 /* ===== 헬스체크 ===== */
 const stateName = (s) => ({0:'disconnected',1:'connected',2:'connecting',3:'disconnecting'}[s] || String(s));
 app.get('/', (_req, res) => res.send('✅ Livee Main Server is running!'));
