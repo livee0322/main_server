@@ -1,7 +1,5 @@
 // routes/recruit-test.js
-// Livee v2.5 - Recruit 전용 간단 라우터 (프런트 recruit-new.js와 호환)
-// NOTE: 운영에선 campaigns 라우터를 쓰고, 이 파일은 테스트/마이그용 래퍼로 사용해도 됨.
-
+// Livee v2.5 - Recruit 전용 라우터 (프런트 recruit-new.js / main.js 와 1:1 매칭)
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
 const sanitizeHtml = require('sanitize-html');
@@ -19,15 +17,9 @@ const sanitize = (html) =>
     allowedSchemes: ['http','https','data','mailto','tel'],
   });
 
-/* -----------------------------
- * Create (POST /recruit-test)
- * 프런트 recruit-new.js의 payload와 동일:
- *  - type: 'recruit' (기본)
- *  - title, category, closeAt, coverImageUrl/thumbnailUrl
- *  - recruit: {shootDate(Date|ISO), shootTime("HH:MM~HH:MM"), pay, payNegotiable, location, requirements, ...}
- * ---------------------------*/
+/* Create */
 router.post('/',
-  auth, requireRole('brand','admin'),
+  auth, requireRole('brand','admin','showhost'),
   body('title').isLength({ min: 1 }),
   body('recruit.shootDate').exists(),
   body('recruit.shootTime').isString().isLength({ min: 1 }),
@@ -36,32 +28,22 @@ router.post('/',
     if (!errors.isEmpty()) {
       return res.fail('VALIDATION_FAILED','VALIDATION_FAILED',422,{ errors: errors.array() });
     }
-
     try {
       const payload = { ...req.body };
-
-      // 강제 기본값/보정
-      payload.type   = 'recruit';
+      payload.type = 'recruit';
       payload.status = payload.status || 'draft';
       payload.createdBy = req.user.id;
 
-      // 썸네일 자동 파생
       if (payload.coverImageUrl && !payload.thumbnailUrl) {
         payload.thumbnailUrl = toThumb(payload.coverImageUrl);
       }
-
-      // 설명 HTML sanitize
       if (payload.descriptionHTML) {
         payload.descriptionHTML = sanitize(payload.descriptionHTML);
       }
-
-      // recruit.shootDate 형식 정규화 (Date/ISO/숫자 모두 허용)
       if (payload.recruit?.shootDate) {
         const d = new Date(payload.recruit.shootDate);
         if (!isNaN(d)) payload.recruit.shootDate = d;
       }
-
-      // closeAt 문자열이라면 Date로 치환
       if (payload.closeAt) {
         const c = new Date(payload.closeAt);
         if (!isNaN(c)) payload.closeAt = c;
@@ -76,13 +58,7 @@ router.post('/',
   }
 );
 
-/* -----------------------------
- * List (GET /recruit-test)
- *  - 기본 type=recruit
- *  - ?status=published|draft...
- *  - ?q= (title 검색)
- *  - ?limit=20, ?page=1
- * ---------------------------*/
+/* List */
 router.get('/',
   query('status').optional().isIn(['draft','scheduled','published','closed']),
   async (req, res) => {
@@ -95,7 +71,6 @@ router.get('/',
       if (req.query.q)      q.title  = { $regex: String(req.query.q), $options: 'i' };
 
       const sort = { createdAt: -1 };
-
       const [items, total] = await Promise.all([
         Campaign.find(q).sort(sort).skip((page - 1) * limit).limit(limit),
         Campaign.countDocuments(q)
@@ -112,10 +87,7 @@ router.get('/',
   }
 );
 
-/* -----------------------------
- * Read (GET /recruit-test/:id)
- *  - 본인 소유가 아니면 published만 허용
- * ---------------------------*/
+/* Read */
 router.get('/:id', auth, async (req, res) => {
   const { id } = req.params;
   if (!mongoose.isValidObjectId(id)) return res.fail('INVALID_ID','INVALID_ID',400);
@@ -135,23 +107,15 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-/* -----------------------------
- * Update (PUT /recruit-test/:id)
- *  - 소유자만 수정
- * ---------------------------*/
-router.put('/:id', auth, requireRole('brand','admin'), async (req, res) => {
+/* Update */
+router.put('/:id', auth, requireRole('brand','admin','showhost'), async (req, res) => {
   const { id } = req.params;
   if (!mongoose.isValidObjectId(id)) return res.fail('INVALID_ID','INVALID_ID',400);
 
   try {
     const $set = { ...req.body };
-
-    if ($set.coverImageUrl && !$set.thumbnailUrl) {
-      $set.thumbnailUrl = toThumb($set.coverImageUrl);
-    }
-    if ($set.descriptionHTML) {
-      $set.descriptionHTML = sanitize($set.descriptionHTML);
-    }
+    if ($set.coverImageUrl && !$set.thumbnailUrl) $set.thumbnailUrl = toThumb($set.coverImageUrl);
+    if ($set.descriptionHTML) $set.descriptionHTML = sanitize($set.descriptionHTML);
     if ($set.recruit?.shootDate) {
       const d = new Date($set.recruit.shootDate);
       if (!isNaN(d)) $set.recruit.shootDate = d;
@@ -160,11 +124,9 @@ router.put('/:id', auth, requireRole('brand','admin'), async (req, res) => {
       const c = new Date($set.closeAt);
       if (!isNaN(c)) $set.closeAt = c;
     }
-
     const updated = await Campaign.findOneAndUpdate(
       { _id: id, createdBy: req.user.id },
-      { $set },
-      { new: true }
+      { $set }, { new: true }
     );
     if (!updated) return res.fail('REJECTED','RECRUIT_FORBIDDEN_EDIT',403);
     return res.ok({ data: toDTO(updated) });
@@ -174,11 +136,8 @@ router.put('/:id', auth, requireRole('brand','admin'), async (req, res) => {
   }
 });
 
-/* -----------------------------
- * Delete (DELETE /recruit-test/:id)
- *  - 소유자만 삭제
- * ---------------------------*/
-router.delete('/:id', auth, requireRole('brand','admin'), async (req, res) => {
+/* Delete */
+router.delete('/:id', auth, requireRole('brand','admin','showhost'), async (req, res) => {
   const { id } = req.params;
   if (!mongoose.isValidObjectId(id)) return res.fail('INVALID_ID','INVALID_ID',400);
 
