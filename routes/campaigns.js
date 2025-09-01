@@ -48,6 +48,10 @@ router.post('/',
     if (!errors.isEmpty()) return res.fail('VALIDATION_FAILED','VALIDATION_FAILED',422,{errors:errors.array()});
 
     const payload = { ...req.body, createdBy: req.user.id };
+    // '게시' 상태로 바로 생성 시 이미지 URL 필수 검증
+    if (payload.status === 'published' && !payload.coverImageUrl) {
+      return res.fail('게시 상태의 캠페인에는 커버 이미지가 반드시 필요합니다.', 'COVER_IMAGE_REQUIRED', 400);
+    }
     if (payload.coverImageUrl && !payload.thumbnailUrl)
       payload.thumbnailUrl = toThumb(payload.coverImageUrl);
     if (payload.descriptionHTML)
@@ -111,6 +115,15 @@ router.get('/:id', auth, async (req, res) => {
 router.put('/:id', auth, requireRole('brand','admin'), async (req, res) => {
   const { id } = req.params;
   if (!mongoose.isValidObjectId(id)) return res.fail('INVALID_ID','INVALID_ID',400);
+
+  // '게시' 상태로 변경 시 이미지 URL 필수 검증
+  if (req.body.status === 'published') {
+    const campaign = await Campaign.findById(id);
+    // DB에 저장된 이미지 URL도 없고, 새로 업데이트되는 값도 없을 경우 에러 처리
+    if (!campaign.coverImageUrl && !req.body.coverImageUrl) {
+      return res.fail('게시 상태로 변경하려면 커버 이미지가 반드시 필요합니다.', 'COVER_IMAGE_REQUIRED', 400);
+    }
+  }
 
   const $set = { ...req.body };
   if ($set.coverImageUrl && !$set.thumbnailUrl) $set.thumbnailUrl = toThumb($set.coverImageUrl);
