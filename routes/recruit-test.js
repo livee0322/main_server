@@ -19,7 +19,7 @@ const sanitize = (html) =>
 
 /* Create */
 router.post('/',
-  auth, requireRole('brand','admin','showhost'),
+  auth, requireRole('brand','admin'),
   body('title').isLength({ min: 1 }),
   body('recruit.shootDate').exists(),
   body('recruit.shootTime').isString().isLength({ min: 1 }),
