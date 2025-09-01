@@ -45,15 +45,17 @@ const CampaignSchema = new Schema({
   // 상품 정보 (이제 'recruit' 타입도 상품을 가질 수 있음)
   products: [ProductItemSchema],
 
+  location: String,
+  shootDate: Date,
+  shootTime: String,
+  fee: Number, // 'pay'에서 'fee'로 이름 변경 및 타입 지정
+  feeNegotiable: { type: Boolean, default: false }, // 'payNegotiable'에서 이름 변경
+
   // 모집형 상세 정보
   recruit: {
     // Recruit 모델의 필드들을 통합
-    recruitType: { type: String, enum:['product','host','both'], default:'product' }, // 구 Recruit 모델의 type
+    recruitType: { type: String, enum:['product','host','both'], default:'product' }, 
     location: String,
-    shootDate: Date,
-    shootTime: String,
-    pay: String,
-    payNegotiable: { type: Boolean, default: false },
     requirements: String, // Recruit 모델의 description과 호환
     preferred: String,
     questions: [QuestionSchema],
