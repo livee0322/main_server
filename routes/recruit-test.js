@@ -1,9 +1,6 @@
-// server/routes/recruit-test.js
-'use strict';
-
+// Livee v2.5 - Recruit 전용 라우터 (main.js / recruit-new.js 매칭)
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
-const sanitizeHtml = require('sanitize-html');
 const mongoose = require('mongoose');
 
 const Campaign = require('../models/Campaign');
@@ -11,29 +8,72 @@ const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
 const { toThumb, toDTO } = require('../src/utils/common');
 
-/* ── brandName 동기화 유틸 (생략 없이 그대로) ── */
+/* ---------------- sanitize: CJS sanitize-html 우선, 실패시 Cheerio 폴백 ---------------- */
+let sanitize = (html = '') => String(html || '');
+try {
+  // sanitize-html v1(CJS)이면 정상 require됨. v2(ESM)일 경우 catch로 폴백.
+  const sh = require('sanitize-html');
+  sanitize = (html = '') =>
+    sh(html || '', {
+      allowedTags: sh.defaults.allowedTags.concat([
+        'img', 'h1', 'h2', 'u', 'span', 'figure', 'figcaption'
+      ]),
+      allowedAttributes: { '*': ['style', 'class', 'id', 'src', 'href', 'alt', 'title'] },
+      allowedSchemes: ['http', 'https', 'data', 'mailto', 'tel'],
+    });
+} catch (e) {
+  // sanitize-html이 ESM이거나 없을 때: Cheerio로 최소한의 화이트리스트 적용
+  const cheerio = require('cheerio');
+  sanitize = (html = '') => {
+    const $ = cheerio.load(`<root>${html || ''}</root>`, { decodeEntities: false });
+    const allowTags = new Set([
+      'p','b','strong','i','em','u','span','br','ul','ol','li','a','img','h1','h2','h3','h4','h5','h6','figure','figcaption'
+    ]);
+    const allowAttrs = new Set(['style','class','id','src','href','alt','title']);
+    $('*').each((_, el) => {
+      const tag = (el.tagName || '').toLowerCase();
+      if (!allowTags.has(tag)) {
+        $(el).replaceWith($(el).text());
+        return;
+      }
+      Object.keys(el.attribs || {}).forEach((name) => {
+        if (!allowAttrs.has(name)) $(el).removeAttr(name);
+      });
+      // href/src scheme 제한
+      ['href','src'].forEach((attr) => {
+        const v = $(el).attr(attr);
+        if (v && !/^(https?:|data:|mailto:|tel:)/i.test(v)) $(el).removeAttr(attr);
+      });
+    });
+    return $('root').html() || '';
+  };
+}
+/* --------------------------------------------------------------------------------------- */
+
+// ---- helper: brandName 추출/동기화 + DTO 병합 ----
 function pickBrandName(doc = {}) {
   const b =
     doc.recruit?.brandName ||
-    doc.recruit?.brandname ||
-    doc.recruit?.brand ||
+    doc.recruit?.brandname ||      // 소문자 변형 흡수
     doc.brandName ||
-    doc.brandname ||
+    doc.brandname ||               // 소문자 변형 흡수
     (typeof doc.brand === 'string' ? doc.brand : '') ||
     doc.brand?.brandName || doc.brand?.name ||
     doc.owner?.brandName || doc.owner?.name ||
-    doc.user?.brandName || doc.user?.companyName ||
+    doc.user?.companyName || doc.user?.brandName ||
     '';
   return (b && String(b).trim()) || '';
 }
+
 function syncBrand(payload = {}) {
   const name =
     payload.brandName ||
     payload.brandname ||
     payload.recruit?.brandName ||
     payload.recruit?.brandname ||
-    payload.recruit?.brand || '';
+    '';
   if (!name) return payload;
+
   const clean = {
     ...payload,
     brandName: name,
@@ -43,17 +83,12 @@ function syncBrand(payload = {}) {
   if (clean.recruit) delete clean.recruit.brandname;
   return clean;
 }
+
 function withBrand(dto, doc) {
   const name = dto.brandName || pickBrandName(doc);
   return { ...dto, brandName: name };
 }
-
-const sanitize = (html) =>
-  sanitizeHtml(html || '', {
-    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img','h1','h2','u','span','figure','figcaption']),
-    allowedAttributes: { '*': ['style','class','id','src','href','alt','title'] },
-    allowedSchemes: ['http','https','data','mailto','tel'],
-  });
+// --------------------------------------------------
 
 /* Create */
 router.post(
@@ -84,7 +119,7 @@ router.post(
 
       const created = await Campaign.create(payload);
       const dto = withBrand(toDTO(created), created);
-      dto.createdAt = created.createdAt;
+      dto.createdAt = created.createdAt; // 최신 정렬용
       return res.ok({ data: dto }, 201);
     } catch (err) {
       console.error('[recruit-test:create] error', err);
@@ -198,8 +233,4 @@ router.delete('/:id', auth, requireRole('brand', 'admin', 'showhost'), async (re
   }
 });
 
-/* ── CJS + ESM 모두 호환되도록 내보내기 ── */
-if (typeof module !== 'undefined') {
-  module.exports = router;           // CJS
-  module.exports.default = router;   // ESM default interop
-}
+module.exports = router;
