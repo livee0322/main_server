@@ -12,7 +12,7 @@ const { toThumb, toDTO } = require('../src/utils/common');
 // ---- helper: brandName 추출/동기화 + DTO 병합 ----
 function pickBrandName(doc = {}) {
   const b =
-    doc.recruit?.brandName ||               // ← 최우선
+    doc.recruit?.brandName ||               // 최우선
     doc.brandName ||
     (typeof doc.brand === 'string' ? doc.brand : '') ||
     doc.brand?.brandName ||
@@ -72,13 +72,12 @@ router.post(
         const c = new Date(payload.closeAt);
         if (!isNaN(c)) payload.closeAt = c;
       }
-      // ✅ brandName 동기화
+      // brandName 동기화
       payload = syncBrand(payload);
 
       const created = await Campaign.create(payload);
       const dto = withBrand(toDTO(created), created);
-      // 최신 정렬 활용을 위해 createdAt 보장
-      dto.createdAt = created.createdAt;
+      dto.createdAt = created.createdAt; // 최신 정렬용 보장
       return res.ok({ data: dto }, 201);
     } catch (err) {
       console.error('[recruit-test:create] error', err);
@@ -108,7 +107,7 @@ router.get(
 
       const mapped = items.map((doc) => {
         const dto = withBrand(toDTO(doc), doc);
-        dto.createdAt = doc.createdAt;
+        dto.createdAt = doc.createdAt; // 최신 정렬용 보장
         return dto;
       });
 
@@ -134,7 +133,7 @@ router.get('/:id', auth, async (req, res) => {
       return res.fail('FORBIDDEN', 'FORBIDDEN', 403);
     }
     const dto = withBrand(toDTO(doc), doc);
-    dto.createdAt = doc.createdAt;
+    dto.createdAt = doc.createdAt; // 최신 정렬용 보장
     return res.ok({ data: dto });
   } catch (err) {
     console.error('[recruit-test:read] error', err);
@@ -159,7 +158,7 @@ router.put('/:id', auth, requireRole('brand', 'admin', 'showhost'), async (req, 
       const c = new Date($set.closeAt);
       if (!isNaN(c)) $set.closeAt = c;
     }
-    // ✅ brandName 동기화
+    // brandName 동기화
     $set = syncBrand($set);
 
     const updated = await Campaign.findOneAndUpdate(
@@ -170,7 +169,7 @@ router.put('/:id', auth, requireRole('brand', 'admin', 'showhost'), async (req, 
     if (!updated) return res.fail('REJECTED', 'RECRUIT_FORBIDDEN_EDIT', 403);
 
     const dto = withBrand(toDTO(updated), updated);
-    dto.createdAt = updated.createdAt;
+    dto.createdAt = updated.createdAt; // 최신 정렬용 보장
     return res.ok({ data: dto });
   } catch (err) {
     console.error('[recruit-test:update] error', err);
