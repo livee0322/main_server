@@ -9,9 +9,10 @@ const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
 const { toThumb, toDTO } = require('../src/utils/common');
 
-// ---- helper: brandName 추출 + DTO 병합 -----------------
+// ---- helper: brandName 추출/동기화 + DTO 병합 ----
 function pickBrandName(doc = {}) {
   const b =
+    doc.recruit?.brandName ||               // ← 최우선
     doc.brandName ||
     (typeof doc.brand === 'string' ? doc.brand : '') ||
     doc.brand?.brandName ||
@@ -20,21 +21,28 @@ function pickBrandName(doc = {}) {
     doc.owner?.name ||
     doc.user?.companyName ||
     doc.user?.brandName ||
-    doc.recruit?.brandName ||
     doc.recruit?.brand ||
     '';
   return (b && String(b).trim()) || '';
 }
-function withBrand(dto, doc) {
-  return { ...dto, brandName: dto.brandName || pickBrandName(doc) };
+function syncBrand(payload = {}) {
+  const name = pickBrandName(payload);
+  if (!name) return payload;
+  return {
+    ...payload,
+    brandName: name,
+    recruit: { ...(payload.recruit||{}), brandName: name }
+  };
 }
-// -------------------------------------------------------
+function withBrand(dto, doc) {
+  const name = dto.brandName || pickBrandName(doc);
+  return { ...dto, brandName: name };
+}
+// --------------------------------------------------
 
 const sanitize = (html) =>
   sanitizeHtml(html || '', {
-    allowedTags: sanitizeHtml.defaults.allowedTags.concat([
-      'img','h1','h2','u','span','figure','figcaption',
-    ]),
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img','h1','h2','u','span','figure','figcaption']),
     allowedAttributes: { '*': ['style','class','id','src','href','alt','title'] },
     allowedSchemes: ['http','https','data','mailto','tel'],
   });
@@ -53,7 +61,7 @@ router.post(
       return res.fail('VALIDATION_FAILED', 'VALIDATION_FAILED', 422, { errors: errors.array() });
     }
     try {
-      const payload = { ...req.body, type: 'recruit', status: req.body.status || 'draft', createdBy: req.user.id };
+      let payload = { ...req.body, type: 'recruit', status: req.body.status || 'draft', createdBy: req.user.id };
       if (payload.coverImageUrl && !payload.thumbnailUrl) payload.thumbnailUrl = toThumb(payload.coverImageUrl);
       if (payload.descriptionHTML) payload.descriptionHTML = sanitize(payload.descriptionHTML);
       if (payload.recruit?.shootDate) {
@@ -64,9 +72,13 @@ router.post(
         const c = new Date(payload.closeAt);
         if (!isNaN(c)) payload.closeAt = c;
       }
+      // ✅ brandName 동기화
+      payload = syncBrand(payload);
 
       const created = await Campaign.create(payload);
       const dto = withBrand(toDTO(created), created);
+      // 최신 정렬 활용을 위해 createdAt 보장
+      dto.createdAt = created.createdAt;
       return res.ok({ data: dto }, 201);
     } catch (err) {
       console.error('[recruit-test:create] error', err);
@@ -94,15 +106,13 @@ router.get(
         Campaign.countDocuments(q),
       ]);
 
-      const mapped = items.map((doc) => withBrand(toDTO(doc), doc));
-
-      return res.ok({
-        items: mapped,
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+      const mapped = items.map((doc) => {
+        const dto = withBrand(toDTO(doc), doc);
+        dto.createdAt = doc.createdAt;
+        return dto;
       });
+
+      return res.ok({ items: mapped, page, limit, total, totalPages: Math.ceil(total / limit) });
     } catch (err) {
       console.error('[recruit-test:list] error', err);
       return res.fail(err.message || 'LIST_FAILED', 'LIST_FAILED', 500);
@@ -124,6 +134,7 @@ router.get('/:id', auth, async (req, res) => {
       return res.fail('FORBIDDEN', 'FORBIDDEN', 403);
     }
     const dto = withBrand(toDTO(doc), doc);
+    dto.createdAt = doc.createdAt;
     return res.ok({ data: dto });
   } catch (err) {
     console.error('[recruit-test:read] error', err);
@@ -137,7 +148,7 @@ router.put('/:id', auth, requireRole('brand', 'admin', 'showhost'), async (req, 
   if (!mongoose.isValidObjectId(id)) return res.fail('INVALID_ID', 'INVALID_ID', 400);
 
   try {
-    const $set = { ...req.body };
+    let $set = { ...req.body };
     if ($set.coverImageUrl && !$set.thumbnailUrl) $set.thumbnailUrl = toThumb($set.coverImageUrl);
     if ($set.descriptionHTML) $set.descriptionHTML = sanitize($set.descriptionHTML);
     if ($set.recruit?.shootDate) {
@@ -148,6 +159,9 @@ router.put('/:id', auth, requireRole('brand', 'admin', 'showhost'), async (req, 
       const c = new Date($set.closeAt);
       if (!isNaN(c)) $set.closeAt = c;
     }
+    // ✅ brandName 동기화
+    $set = syncBrand($set);
+
     const updated = await Campaign.findOneAndUpdate(
       { _id: id, createdBy: req.user.id },
       { $set },
@@ -156,6 +170,7 @@ router.put('/:id', auth, requireRole('brand', 'admin', 'showhost'), async (req, 
     if (!updated) return res.fail('REJECTED', 'RECRUIT_FORBIDDEN_EDIT', 403);
 
     const dto = withBrand(toDTO(updated), updated);
+    dto.createdAt = updated.createdAt;
     return res.ok({ data: dto });
   } catch (err) {
     console.error('[recruit-test:update] error', err);
