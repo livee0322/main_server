@@ -12,27 +12,39 @@ const { toThumb, toDTO } = require('../src/utils/common');
 // ---- helper: brandName 추출/동기화 + DTO 병합 ----
 function pickBrandName(doc = {}) {
   const b =
-    doc.recruit?.brandName ||               // 최우선
+    doc.recruit?.brandName ||
+    doc.recruit?.brandname ||          // 👈 소문자도 흡수
     doc.brandName ||
+    doc.brandname ||                   // 👈 소문자도 흡수
     (typeof doc.brand === 'string' ? doc.brand : '') ||
-    doc.brand?.brandName ||
-    doc.brand?.name ||
-    doc.owner?.brandName ||
-    doc.owner?.name ||
-    doc.user?.companyName ||
-    doc.user?.brandName ||
-    doc.recruit?.brand ||
+    doc.brand?.brandName || doc.brand?.name ||
+    doc.owner?.brandName || doc.owner?.name ||
+    doc.user?.companyName || doc.user?.brandName ||
     '';
   return (b && String(b).trim()) || '';
 }
 function syncBrand(payload = {}) {
-  const name = pickBrandName(payload);
+  // 어떤 이름으로 와도 하나로 정리
+  const name =
+    payload.brandName ||
+    payload.brandname ||
+    payload.recruit?.brandName ||
+    payload.recruit?.brandname ||
+    '';
+
   if (!name) return payload;
-  return {
+
+  const clean = {
     ...payload,
     brandName: name,
-    recruit: { ...(payload.recruit||{}), brandName: name }
+    recruit: { ...(payload.recruit || {}), brandName: name }
   };
+
+  // 저장시 불필요한 소문자 키는 제거(있어도 무해하지만 정리해둠)
+  delete clean.brandname;
+  if (clean.recruit) delete clean.recruit.brandname;
+
+  return clean;
 }
 function withBrand(dto, doc) {
   const name = dto.brandName || pickBrandName(doc);
@@ -72,12 +84,11 @@ router.post(
         const c = new Date(payload.closeAt);
         if (!isNaN(c)) payload.closeAt = c;
       }
-      // brandName 동기화
-      payload = syncBrand(payload);
+      payload = syncBrand(payload);                         // ✅ 이름 동기화
 
       const created = await Campaign.create(payload);
       const dto = withBrand(toDTO(created), created);
-      dto.createdAt = created.createdAt; // 최신 정렬용 보장
+      dto.createdAt = created.createdAt;                    // 최신 정렬용
       return res.ok({ data: dto }, 201);
     } catch (err) {
       console.error('[recruit-test:create] error', err);
@@ -107,7 +118,7 @@ router.get(
 
       const mapped = items.map((doc) => {
         const dto = withBrand(toDTO(doc), doc);
-        dto.createdAt = doc.createdAt; // 최신 정렬용 보장
+        dto.createdAt = doc.createdAt;
         return dto;
       });
 
@@ -133,7 +144,7 @@ router.get('/:id', auth, async (req, res) => {
       return res.fail('FORBIDDEN', 'FORBIDDEN', 403);
     }
     const dto = withBrand(toDTO(doc), doc);
-    dto.createdAt = doc.createdAt; // 최신 정렬용 보장
+    dto.createdAt = doc.createdAt;
     return res.ok({ data: dto });
   } catch (err) {
     console.error('[recruit-test:read] error', err);
@@ -158,8 +169,7 @@ router.put('/:id', auth, requireRole('brand', 'admin', 'showhost'), async (req, 
       const c = new Date($set.closeAt);
       if (!isNaN(c)) $set.closeAt = c;
     }
-    // brandName 동기화
-    $set = syncBrand($set);
+    $set = syncBrand($set);                                  // ✅ 이름 동기화
 
     const updated = await Campaign.findOneAndUpdate(
       { _id: id, createdBy: req.user.id },
@@ -169,7 +179,7 @@ router.put('/:id', auth, requireRole('brand', 'admin', 'showhost'), async (req, 
     if (!updated) return res.fail('REJECTED', 'RECRUIT_FORBIDDEN_EDIT', 403);
 
     const dto = withBrand(toDTO(updated), updated);
-    dto.createdAt = updated.createdAt; // 최신 정렬용 보장
+    dto.createdAt = updated.createdAt;
     return res.ok({ data: dto });
   } catch (err) {
     console.error('[recruit-test:update] error', err);
