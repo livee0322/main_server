@@ -1,4 +1,6 @@
-// Livee v2.5 - Recruit 전용 라우터
+// server/routes/recruit-test.js
+'use strict';
+
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
 const sanitizeHtml = require('sanitize-html');
@@ -7,14 +9,14 @@ const mongoose = require('mongoose');
 const Campaign = require('../models/Campaign');
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
-const { toThumb, toDTO } = require('../src/utils/common);
+const { toThumb, toDTO } = require('../src/utils/common');
 
-/* ── brandName 동기화 ────────────────────────────────────────── */
+/* ── brandName 동기화 유틸 (생략 없이 그대로) ── */
 function pickBrandName(doc = {}) {
   const b =
     doc.recruit?.brandName ||
     doc.recruit?.brandname ||
-    doc.recruit?.brand ||                   // ← 문자열로 저장된 경우
+    doc.recruit?.brand ||
     doc.brandName ||
     doc.brandname ||
     (typeof doc.brand === 'string' ? doc.brand : '') ||
@@ -31,9 +33,7 @@ function syncBrand(payload = {}) {
     payload.recruit?.brandName ||
     payload.recruit?.brandname ||
     payload.recruit?.brand || '';
-
   if (!name) return payload;
-
   const clean = {
     ...payload,
     brandName: name,
@@ -47,7 +47,6 @@ function withBrand(dto, doc) {
   const name = dto.brandName || pickBrandName(doc);
   return { ...dto, brandName: name };
 }
-/* ──────────────────────────────────────────────────────────── */
 
 const sanitize = (html) =>
   sanitizeHtml(html || '', {
@@ -199,4 +198,8 @@ router.delete('/:id', auth, requireRole('brand', 'admin', 'showhost'), async (re
   }
 });
 
-module.exports = router;
+/* ── CJS + ESM 모두 호환되도록 내보내기 ── */
+if (typeof module !== 'undefined') {
+  module.exports = router;           // CJS
+  module.exports.default = router;   // ESM default interop
+}
