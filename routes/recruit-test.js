@@ -1,4 +1,4 @@
-// Livee v2.5 - Recruit 전용 라우터 (프런트 recruit-new.js / main.js 와 1:1 매칭)
+// Livee v2.5 - Recruit 전용 라우터 (main.js / recruit-new.js 매칭)
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
 const sanitizeHtml = require('sanitize-html');
@@ -11,18 +11,21 @@ const { toThumb, toDTO } = require('../src/utils/common');
 
 // ---- helper: brandName 추출 + DTO 병합 -----------------
 function pickBrandName(doc = {}) {
-  return (
+  const b =
     doc.brandName ||
+    (typeof doc.brand === 'string' ? doc.brand : '') ||
+    doc.brand?.brandName ||
     doc.brand?.name ||
     doc.owner?.brandName ||
     doc.owner?.name ||
     doc.user?.companyName ||
     doc.user?.brandName ||
-    ''
-  );
+    doc.recruit?.brandName ||
+    doc.recruit?.brand ||
+    '';
+  return (b && String(b).trim()) || '';
 }
 function withBrand(dto, doc) {
-  // 프론트가 dto.brandName 을 읽도록 보장
   return { ...dto, brandName: dto.brandName || pickBrandName(doc) };
 }
 // -------------------------------------------------------
@@ -30,16 +33,10 @@ function withBrand(dto, doc) {
 const sanitize = (html) =>
   sanitizeHtml(html || '', {
     allowedTags: sanitizeHtml.defaults.allowedTags.concat([
-      'img',
-      'h1',
-      'h2',
-      'u',
-      'span',
-      'figure',
-      'figcaption',
+      'img','h1','h2','u','span','figure','figcaption',
     ]),
-    allowedAttributes: { '*': ['style', 'class', 'id', 'src', 'href', 'alt', 'title'] },
-    allowedSchemes: ['http', 'https', 'data', 'mailto', 'tel'],
+    allowedAttributes: { '*': ['style','class','id','src','href','alt','title'] },
+    allowedSchemes: ['http','https','data','mailto','tel'],
   });
 
 /* Create */
@@ -56,17 +53,9 @@ router.post(
       return res.fail('VALIDATION_FAILED', 'VALIDATION_FAILED', 422, { errors: errors.array() });
     }
     try {
-      const payload = { ...req.body };
-      payload.type = 'recruit';
-      payload.status = payload.status || 'draft';
-      payload.createdBy = req.user.id;
-
-      if (payload.coverImageUrl && !payload.thumbnailUrl) {
-        payload.thumbnailUrl = toThumb(payload.coverImageUrl);
-      }
-      if (payload.descriptionHTML) {
-        payload.descriptionHTML = sanitize(payload.descriptionHTML);
-      }
+      const payload = { ...req.body, type: 'recruit', status: req.body.status || 'draft', createdBy: req.user.id };
+      if (payload.coverImageUrl && !payload.thumbnailUrl) payload.thumbnailUrl = toThumb(payload.coverImageUrl);
+      if (payload.descriptionHTML) payload.descriptionHTML = sanitize(payload.descriptionHTML);
       if (payload.recruit?.shootDate) {
         const d = new Date(payload.recruit.shootDate);
         if (!isNaN(d)) payload.recruit.shootDate = d;
