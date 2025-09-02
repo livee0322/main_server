@@ -15,8 +15,17 @@ const toDTO = (doc) => {
   const o = (doc?.toObject ? doc.toObject() : doc) || {};
   const imageUrl = o.coverImageUrl || o.thumbnailUrl || '';
   const thumbnailUrl = o.thumbnailUrl || toThumb(imageUrl) || '';
-  // _id 필드를 id 문자열로 변환하여 프론트엔드 호환성 증대
-  return { ...o, imageUrl, thumbnailUrl, id: o._id?.toString?.() || o.id };
+  
+  return { 
+    ...o, 
+    imageUrl, 
+    thumbnailUrl, 
+    id: o._id?.toString?.() || o.id,
+    brand: o.brand,
+    fee: o.fee,
+    feeNegotiable: o.feeNegotiable,
+    liveTime: o.liveTime
+  };
 };
 
 module.exports = {
