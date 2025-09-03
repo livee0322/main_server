@@ -68,6 +68,10 @@ app.use('/api/portfolio', require('./routes/portfolio'));
 
 // 태웅이 테스트 
 app.use(`${BASE_PATH}/recruit-test`, require('./routes/recruit-test'));
+const portfolioRouter = require('./routes/portfolio-test');
+app.use('/api/v1/portfolio-test', portfolioRouter);
+app.use('/api/v1/portfolios',    portfolioRouter); // 프런트 호환용
+
 
 /* ===== 헬스체크 ===== */
 const stateName = (s) => ({0:'disconnected',1:'connected',2:'connecting',3:'disconnecting'}[s] || String(s));
