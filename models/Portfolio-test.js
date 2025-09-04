@@ -10,14 +10,14 @@ const LiveLinkSchema = new Schema(
 const PortfolioSchema = new Schema(
   {
     type:   { type: String, default: 'portfolio' },
-    status: { type: String, enum: ['draft', 'published'], default: 'draft' },
+    status: { type: String, enum: ['draft','published'], default: 'draft' },
 
-    visibility: { type: String, enum: ['public', 'unlisted', 'private'], default: 'public' },
+    visibility: { type: String, enum: ['public','unlisted','private'], default: 'public' },
 
     // media
     mainThumbnailUrl: { type: String, trim: true },
     coverImageUrl:    { type: String, trim: true },
-    subThumbnails:    [{ type: String, trim: true }], // (라우터에서 최대 5개 제한)
+    subThumbnails:    [{ type: String, trim: true }],
 
     // identity
     realName:       { type: String, trim: true },
@@ -36,22 +36,23 @@ const PortfolioSchema = new Schema(
 
     // content
     bio:  { type: String, trim: true },
-    tags: [{ type: String, trim: true }], // (라우터에서 최대 8개 제한)
+    tags: [{ type: String, trim: true }],
 
     openToOffers: { type: Boolean, default: true },
 
-    // ✅ 여러 개 허용: createdBy만 사용(고유 아님)
+    // ✅ 여러 개 허용: createdBy만 사용(고유 X)
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   },
-  {
-    timestamps: true,
-    collection: 'portfolios',
-  }
+  { timestamps: true, collection: 'portfolios' }
 );
 
 // 조회 최적화 인덱스(선택)
 PortfolioSchema.index({ status: 1, visibility: 1, createdAt: -1 });
 PortfolioSchema.index({ tags: 1 });
 
-// OverwriteModelError 방지
-module.exports = mongoose.models.Portfolio || mongoose.model('Portfolio', PortfolioSchema);
+// ✅ 모델 캐시가 이전 스키마( user required )로 남아있을 수 있으므로 지워주고 새 이름으로 등록
+const MODEL_NAME = 'PortfolioTest';
+if (mongoose.connection.models[MODEL_NAME]) {
+  delete mongoose.connection.models[MODEL_NAME];
+}
+module.exports = mongoose.model(MODEL_NAME, PortfolioSchema, 'portfolios');
