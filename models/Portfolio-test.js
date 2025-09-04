@@ -1,45 +1,62 @@
 // models/Portfolio-test.js
 const mongoose = require('mongoose');
+const { Schema } = mongoose;
 
-const LiveLinkSchema = new mongoose.Schema({
-  title: { type: String, trim: true },
-  url:   { type: String, trim: true },
-  date:  { type: Date }
-},{ _id:false });
+const LiveLinkSchema = new Schema(
+  {
+    title: { type: String, trim: true },
+    url:   { type: String, trim: true },
+    date:  { type: Date },
+  },
+  { _id: false }
+);
 
-const PortfolioSchema = new mongoose.Schema({
-  type:        { type: String, default: 'portfolio' },
-  status:      { type: String, enum: ['draft','published'], default: 'draft' },
+const PortfolioSchema = new Schema(
+  {
+    type:   { type: String, default: 'portfolio' },
+    status: { type: String, enum: ['draft', 'published'], default: 'draft' },
 
-  visibility:  { type: String, enum: ['public','unlisted','private'], default: 'public' },
+    visibility: { type: String, enum: ['public', 'unlisted', 'private'], default: 'public' },
 
-  // media
-  mainThumbnailUrl: { type: String, trim: true },
-  coverImageUrl:    { type: String, trim: true },
-  subThumbnails:    [{ type: String, trim: true }], // 최대 5개 (라우터에서 검증)
+    // media
+    mainThumbnailUrl: { type: String, trim: true },
+    coverImageUrl:    { type: String, trim: true },
+    subThumbnails:    [{ type: String, trim: true }], // (라우터에서 최대 5개 제한)
 
-  // identity
-  realName:        { type: String, trim: true },
-  realNamePublic:  { type: Boolean, default: false },
-  nickname:        { type: String, trim: true, required: true },
-  headline:        { type: String, trim: true, required: true },
+    // identity
+    realName:       { type: String, trim: true },
+    realNamePublic: { type: Boolean, default: false },
+    nickname:       { type: String, trim: true, required: true },
+    headline:       { type: String, trim: true, required: true },
 
-  // stats
-  careerYears: { type: Number, min: 0, max: 50 },
-  age:         { type: Number, min: 14, max: 99 },
-  agePublic:   { type: Boolean, default: false },
+    // stats
+    careerYears: { type: Number, min: 0, max: 50 },
+    age:         { type: Number, min: 14, max: 99 },
+    agePublic:   { type: Boolean, default: false },
 
-  // links
-  primaryLink: { type: String, trim: true },
-  liveLinks:   { type: [LiveLinkSchema], default: [] },
+    // links
+    primaryLink: { type: String, trim: true },
+    liveLinks:   { type: [LiveLinkSchema], default: [] },
 
-  // content
-  bio:  { type: String, trim: true },  // 글자수 제한 없음(요청사항)
-  tags: [{ type: String, trim: true }], // 최대 8개 (라우터에서 검증)
+    // content
+    bio:  { type: String, trim: true },   // 길이 제한 없음
+    tags: [{ type: String, trim: true }], // (라우터에서 최대 8개 제한)
 
-  openToOffers: { type: Boolean, default: true },
+    openToOffers: { type: Boolean, default: true },
 
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-}, { timestamps: true });
+    // ✅ 여러 개 허용: createdBy는 "인덱스만", unique 아님
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  },
+  {
+    timestamps: true,
+    collection: 'portfolios', // 기존 컬렉션 그대로 사용
+  }
+);
 
-module.exports = mongoose.model('Portfolio', PortfolioSchema);
+// 조회 최적화 인덱스 (optional)
+PortfolioSchema.index({ status: 1, visibility: 1, createdAt: -1 });
+PortfolioSchema.index({ tags: 1 });
+
+// OverwriteModelError 방지
+module.exports =
+  mongoose.models.Portfolio || mongoose.model('Portfolio', PortfolioSchema);
