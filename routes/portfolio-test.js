@@ -9,8 +9,7 @@ const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
 const mongoose = require('mongoose');
 const sanitizeHtml = require('sanitize-html');
-
-const Portfolio = require('../models/Portfolio');
+const Portfolio = require('../models/Portfolio-test'); // 변경
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
 
