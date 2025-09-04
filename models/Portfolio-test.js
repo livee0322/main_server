@@ -3,11 +3,7 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const LiveLinkSchema = new Schema(
-  {
-    title: { type: String, trim: true },
-    url:   { type: String, trim: true },
-    date:  { type: Date },
-  },
+  { title: { type: String, trim: true }, url: { type: String, trim: true }, date: { type: Date } },
   { _id: false }
 );
 
@@ -39,24 +35,23 @@ const PortfolioSchema = new Schema(
     liveLinks:   { type: [LiveLinkSchema], default: [] },
 
     // content
-    bio:  { type: String, trim: true },   // 길이 제한 없음
+    bio:  { type: String, trim: true },
     tags: [{ type: String, trim: true }], // (라우터에서 최대 8개 제한)
 
     openToOffers: { type: Boolean, default: true },
 
-    // ✅ 여러 개 허용: createdBy는 "인덱스만", unique 아님
+    // ✅ 여러 개 허용: createdBy만 사용(고유 아님)
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   },
   {
     timestamps: true,
-    collection: 'portfolios', // 기존 컬렉션 그대로 사용
+    collection: 'portfolios',
   }
 );
 
-// 조회 최적화 인덱스 (optional)
+// 조회 최적화 인덱스(선택)
 PortfolioSchema.index({ status: 1, visibility: 1, createdAt: -1 });
 PortfolioSchema.index({ tags: 1 });
 
 // OverwriteModelError 방지
-module.exports =
-  mongoose.models.Portfolio || mongoose.model('Portfolio', PortfolioSchema);
+module.exports = mongoose.models.Portfolio || mongoose.model('Portfolio', PortfolioSchema);
