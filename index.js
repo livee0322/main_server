@@ -72,6 +72,20 @@ const portfolioRouter = require('./routes/portfolio-test');
 app.use('/api/v1/portfolio-test', portfolioRouter);
 app.use('/api/v1/portfolios',    portfolioRouter); // 프런트 호환용
 
+(async () => {
+  try {
+    const exists = await mongoose.connection.db
+      .collection('portfolios')
+      .indexExists('user_1');
+    if (exists) {
+      await mongoose.connection.db.collection('portfolios').dropIndex('user_1');
+      console.log('[migrate] dropped legacy unique index user_1');
+    }
+  } catch (e) {
+    console.warn('[migrate] drop user_1 skipped:', e.message);
+  }
+})();
+
 
 /* ===== 헬스체크 ===== */
 const stateName = (s) => ({0:'disconnected',1:'connected',2:'connecting',3:'disconnecting'}[s] || String(s));
