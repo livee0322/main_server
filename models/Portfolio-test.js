@@ -1,5 +1,4 @@
 'use strict';
-
 const mongoose = require('mongoose');
 
 const LiveLinkSchema = new mongoose.Schema({
@@ -13,10 +12,10 @@ const PortfolioSchema = new mongoose.Schema({
   status:     { type: String, enum: ['draft','published'], default: 'draft', index: true },
   visibility: { type: String, enum: ['public','unlisted','private'], default: 'public' },
 
-  // 통일된 필드
+  // 통일 필드
   nickname:   { type: String, trim: true, maxlength: 80 },
   headline:   { type: String, trim: true, maxlength: 120 },
-  bio:        { type: String, default: '' }, // 길이 제한 없음(라우터에서만 sanitize)
+  bio:        { type: String, default: '' },   // 자유 길이(최소 글자 제한 없음)
 
   mainThumbnailUrl: { type: String, trim: true },
   coverImageUrl:    { type: String, trim: true },
@@ -38,15 +37,10 @@ const PortfolioSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true }
 }, { timestamps: true });
 
-/** 여러 개 허용: createdBy 에 unique 인덱스 절대 금지 */
-
+// 여러 개 등록 가능해야 하므로 createdBy에 unique 인덱스 절대 금지
 PortfolioSchema.set('toJSON', {
-  virtuals: true,
-  versionKey: false,
-  transform(_doc, ret){
-    ret.id = String(ret._id);
-    delete ret._id;
-  }
+  virtuals: true, versionKey: false,
+  transform(_doc, ret){ ret.id = String(ret._id); delete ret._id; }
 });
 
 module.exports = mongoose.model('PortfolioTest', PortfolioSchema);
