@@ -1,4 +1,5 @@
-// routes/portfolio.js
+// routes/portfolio-
+test.js
 'use strict';
 
 const router = require('express').Router();
@@ -10,7 +11,7 @@ const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
 const Portfolio = require('../models/Portfolio');
 
-// ── helpers ────────────────────────────────────────────────────────────────
+/* ───────────────── helpers ───────────────── */
 const optionalAuth = auth.optional ? auth.optional() : (req,res,next)=>next();
 
 const sanitize = (html='') => sanitizeHtml(html, {
@@ -19,7 +20,7 @@ const sanitize = (html='') => sanitizeHtml(html, {
   allowedSchemes: ['http','https','data','mailto','tel'],
 });
 
-// 구버전 필드명을 캐논 필드로 매핑
+// 구버전 → 표준 필드 매핑
 function compatBody(b){
   const out = { ...b };
   if (out.displayName && !out.nickname) out.nickname = out.displayName;
@@ -29,7 +30,7 @@ function compatBody(b){
   return out;
 }
 
-// 정규화(길이/중복/타입 보정)
+// 정규화
 function normalizePayload(p){
   const out = { ...p };
 
@@ -61,9 +62,9 @@ function normalizePayload(p){
   return out;
 }
 
-// 상태가 published일 때 필수/추가 검증
+// 발행 시 필수 체크
 function publishedGuard(req, res, next){
-  const p = req.body;
+  const p = req.body || {};
   const status = p.status || 'draft';
   if (status !== 'published') return next();
 
@@ -77,36 +78,44 @@ function publishedGuard(req, res, next){
   next();
 }
 
-// 공통 스키마(드래프트/발행 공통 규칙)
+// ── 공통 검증 스키마 (draft에선 빈값 허용) ──
+const opt = { checkFalsy: true, nullable: true };
+
 const baseSchema = [
   body('status').optional().isIn(['draft','published']),
   body('visibility').optional().isIn(['public','unlisted','private']),
 
-  body('nickname').optional().isString().trim().isLength({ min:1, max:80 }),
-  body('headline').optional().isString().trim().isLength({ min:1, max:120 }),
-  body('bio').optional().isString().isLength({ max:5000 }),
+  body('nickname').optional(opt).isString().trim().isLength({ max:80 }),
+  body('headline').optional(opt).isString().trim().isLength({ max:120 }),
+  body('bio').optional(opt).isString().isLength({ max:5000 }),
 
-  body('mainThumbnailUrl').optional().isURL({ protocols:['http','https'], require_protocol:true }),
-  body('coverImageUrl').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+  body('mainThumbnailUrl').optional(opt)
+    .isURL({ protocols:['http','https'], require_protocol:true }),
+  body('coverImageUrl').optional(opt)
+    .isURL({ protocols:['http','https'], require_protocol:true }),
 
   body('subThumbnails').optional().isArray({ max:5 }),
-  body('subThumbnails.*').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+  body('subThumbnails.*').optional(opt)
+    .isURL({ protocols:['http','https'], require_protocol:true }),
 
   body('tags').optional().isArray({ max:8 }),
-  body('tags.*').optional().isString().trim().isLength({ min:1, max:30 }),
+  body('tags.*').optional(opt).isString().trim().isLength({ max:30 }),
 
   body('liveLinks').optional().isArray({ max:50 }),
-  body('liveLinks.*.title').optional().isString().trim().isLength({ max:120 }),
-  body('liveLinks.*.url').optional().isURL({ protocols:['http','https'], require_protocol:true }),
-  body('liveLinks.*.date').optional().isISO8601().toDate(),
+  body('liveLinks.*.title').optional(opt).isString().trim().isLength({ max:120 }),
+  body('liveLinks.*.url').optional(opt)
+    .isURL({ protocols:['http','https'], require_protocol:true }),
+  body('liveLinks.*.date').optional(opt).isISO8601().toDate(),
 
-  body('careerYears').optional().isInt({ min:0, max:50 }).toInt(),
-  body('age').optional().isInt({ min:14, max:99 }).toInt(),
-  body('realName').optional().isString().trim().isLength({ max:80 }),
+  body('careerYears').optional({ checkFalsy:true }).isInt({ min:0, max:50 }).toInt(),
+  body('age').optional({ checkFalsy:true }).isInt({ min:14, max:99 }).toInt(),
+  body('realName').optional(opt).isString().trim().isLength({ max:80 }),
   body('realNamePublic').optional().isBoolean().toBoolean(),
   body('agePublic').optional().isBoolean().toBoolean(),
   body('openToOffers').optional().isBoolean().toBoolean(),
-  body('primaryLink').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+
+  body('primaryLink').optional(opt)
+    .isURL({ protocols:['http','https'], require_protocol:true }),
 ];
 
 // 표준 에러 응답
@@ -116,7 +125,7 @@ function sendValidationIfAny(req, res, next){
   return res.status(422).json({ ok:false, message:'VALIDATION_FAILED', details: v.array() });
 }
 
-// ── Routes ────────────────────────────────────────────────────────────────
+/* ───────────────── Routes ───────────────── */
 
 // Create
 router.post('/',
@@ -147,7 +156,7 @@ router.post('/',
   }
 );
 
-// List (mine=1 이면 본인 것, 아니면 공개물만)
+// List
 router.get('/',
   optionalAuth,
   query('status').optional().isIn(['draft','published']),
@@ -215,7 +224,6 @@ router.put('/:id',
 
     try{
       const payload = normalizePayload(req.body || {});
-
       const updated = await Portfolio.findOneAndUpdate(
         { _id:id, createdBy: req.user.id },
         { $set: payload },
