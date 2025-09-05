@@ -8,6 +8,8 @@ const sanitizeHtml = require('sanitize-html');
 
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
+
+// ⚠️ Linux(배포)에서 대소문자 구분됩니다. models/Portfolio-test.js 와 정확히 일치
 const Portfolio = require('../models/Portfolio-test');
 
 /* ===== helpers ===== */
@@ -75,16 +77,9 @@ function publishedGuard(req, res, next){
   next();
 }
 
-/* ===== ultra-tolerant validators ===== */
+/* ===== 느슨한 검증 설정 ===== */
 const opt = { checkFalsy: true, nullable: true };
-
-// http(s):// 시작만 확인(Cloudinary 변환 경로 포함 허용)
-const isHttpish = (v) => {
-  if (v === undefined || v === null || v === '') return true;
-  return /^https?:\/\//i.test(String(v));
-};
-
-// boolean 어떤 형태든 OK → true/false 로 변환
+const isHttpish = (v) => (v === undefined || v === null || v === '' ? true : /^https?:\/\//i.test(String(v)));
 const anyBool = (v) =>
   v === true || v === false || v === 'true' || v === 'false' || v === 1 || v === 0 || v === '1' || v === '0';
 
@@ -121,12 +116,19 @@ const baseSchema = [
   body('primaryLink').optional(opt).custom(isHttpish),
 ];
 
+// ✅ 무조건 바디 로깅 (422 디버깅용)
+router.use((req, _res, next) => {
+  if (req.method === 'POST' || req.method === 'PUT') {
+    console.log('[portfolio-test:incoming]', req.method, req.originalUrl, JSON.stringify(req.body));
+  }
+  next();
+});
+
 function sendValidationIfAny(req, res, next){
   const v = validationResult(req);
   if (v.isEmpty()) return next();
   const details = v.array();
-  // ✅ 반드시 로그 남김
-  console.warn('[portfolio-test:validation]', JSON.stringify({ details, body: req.body }, null, 2));
+  console.warn('[portfolio-test:validation]', JSON.stringify({ details }, null, 2));
   return res.status(422).json({ ok:false, code:'VALIDATION_FAILED', details });
 }
 
@@ -148,12 +150,6 @@ router.post('/',
       return res.status(201).json({ data: created });
     }catch(err){
       console.error('[portfolio-test:create]', err);
-      if (err?.code === 11000 && String(err?.message||'').includes('user_1')) {
-        return res.status(409).json({
-          ok:false, code:'DUP_INDEX_USER_1',
-          message:'기존 user_1 유니크 인덱스가 남아 있습니다. db.portfolios.dropIndex("user_1") 후 재시도하세요.'
-        });
-      }
       return res.status(500).json({ ok:false, code:'CREATE_FAILED', message: err.message || 'CREATE_FAILED' });
     }
   }
