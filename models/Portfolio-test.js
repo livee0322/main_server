@@ -1,46 +1,44 @@
 'use strict';
-const mongoose = require('mongoose');
+const { Schema, model } = require('mongoose');
 
-const LiveLinkSchema = new mongoose.Schema({
-  title: { type: String, trim: true, maxlength: 120 },
-  url:   { type: String, trim: true },
-  date:  { type: Date }
-}, { _id: false });
-
-const PortfolioSchema = new mongoose.Schema({
-  type:       { type: String, default: 'portfolio', index: true },
-  status:     { type: String, enum: ['draft','published'], default: 'draft', index: true },
+const PortfolioSchema = new Schema({
+  type: { type: String, default: 'portfolio' },
+  status: { type: String, enum: ['draft','published'], default: 'draft' },
   visibility: { type: String, enum: ['public','unlisted','private'], default: 'public' },
 
-  // 통일 필드
-  nickname:   { type: String, trim: true, maxlength: 80 },
-  headline:   { type: String, trim: true, maxlength: 120 },
-  bio:        { type: String, default: '' },   // 자유 길이(최소 글자 제한 없음)
+  nickname: { type: String, trim: true },
+  headline: { type: String, trim: true },            // 한줄소개
+  bio: { type: String, default: '' },                // 자유 길이
 
   mainThumbnailUrl: { type: String, trim: true },
   coverImageUrl:    { type: String, trim: true },
-  subThumbnails:    { type: [String], default: [] },
+  subThumbnails:    [{ type: String, trim: true }],
 
-  realName:       { type: String, trim: true, maxlength: 80 },
+  // 호환(읽기 전용 느낌) — 예전 문서가 가진 필드
+  mainThumbnail: { type: String, trim: true },
+  coverImage:    { type: String, trim: true },
+  subImages:     [{ type: String, trim: true }],
+  displayName:   { type: String, trim: true },
+  name:          { type: String, trim: true },
+
+  careerYears: { type: Number, min:0, max:50 },
+  age:         { type: Number, min:14, max:99 },
+  realName:    { type: String, trim:true },
   realNamePublic: { type: Boolean, default: false },
-  careerYears:    { type: Number, min: 0, max: 50 },
-  age:            { type: Number, min: 14, max: 99 },
   agePublic:      { type: Boolean, default: false },
+  openToOffers:   { type: Boolean, default: true },
 
   primaryLink: { type: String, trim: true },
 
-  liveLinks:  { type: [LiveLinkSchema], default: [] },
-  tags:       { type: [String], default: [] },
+  liveLinks: [{
+    title: { type: String, trim: true },
+    url:   { type: String, trim: true },
+    date:  { type: Date }
+  }],
 
-  openToOffers: { type: Boolean, default: true },
+  tags: [{ type: String, trim: true }],
 
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true }
-}, { timestamps: true });
+  createdBy: { type: Schema.Types.ObjectId, ref: 'User' } // ⚠️ unique 절대 금지
+}, { timestamps:true });
 
-// 여러 개 등록 가능해야 하므로 createdBy에 unique 인덱스 절대 금지
-PortfolioSchema.set('toJSON', {
-  virtuals: true, versionKey: false,
-  transform(_doc, ret){ ret.id = String(ret._id); delete ret._id; }
-});
-
-module.exports = mongoose.model('PortfolioTest', PortfolioSchema);
+module.exports = model('PortfolioTest', PortfolioSchema);
