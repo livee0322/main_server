@@ -6,7 +6,6 @@ const portfolioSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true,
     },
     nickname: { type: String, trim: true },
     oneLineIntro: { type: String, trim: true },

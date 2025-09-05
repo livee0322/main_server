@@ -1,94 +1,114 @@
-// routes/portfolio.js (Refactored - Error Handling & Response Standardized)
+// routes/portfolio.js (다중 포트폴리오 기능을 위해 재구성됨)
 const router = require('express').Router();
-const { body, validationResult } = require('express-validator');
 const Portfolio = require('../models/Portfolio');
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
-const asyncHandler = require('../src/middleware/asyncHandler'); // 비동기 핸들러 불러오기
+const asyncHandler = require('../src/middleware/asyncHandler'); // 비동기 에러 핸들링
 
-// 모든 API 핸들러를 asyncHandler로 감싸고, 응답을 res.ok/res.fail로 통일
+// ----------------------------------------------------------------
+// [신규/변경 API] 쇼호스트 본인 포트폴리오 관리 (다중)
+// ----------------------------------------------------------------
 
-// 공개 리스트 (홈/리스트)
-router.get('/', asyncHandler(async (req, res) => {
-  const page = Math.max(parseInt(req.query.page || '1'), 1);
-  const limit = Math.min(parseInt(req.query.limit || '20'), 50);
-
-  // 검색 조건을 담을 쿼리 객체
-  const query = { isPublic: true };
-  if (req.query.q) { // 이름, 소개 등으로 텍스트 검색
-    query.$or = [
-      { name: { $regex: req.query.q, $options: 'i' } },
-      { introText: { $regex: req.query.q, $options: 'i' } },
-    ];
-  }
-  if (req.query.region) query.region = req.query.region; // 지역 필터
-  if (req.query.jobTag) query.jobTag = req.query.jobTag; // 직무 태그 필터
-
-  // 수정된 쿼리 객체 적용
-  const items = await Portfolio.find({ isPublic: true })
-    .sort({ createdAt: -1 })
-    .skip((page - 1) * limit)
-    .limit(limit)
-    .select('name profileImage introText jobTag region experienceYears isPublic');
+/**
+ * @route   GET /api/v1/portfolios/my/list
+ * @desc    내 모든 포트폴리오 목록 조회 (신설)
+ * @access  Private (Showhost)
+ */
+router.get('/my/list', auth, requireRole('showhost'), asyncHandler(async (req, res) => {
+  // 중요: 현재 로그인한 사용자(req.user.id)가 생성한 모든 포트폴리오를 검색합니다.
+  const items = await Portfolio.find({ user: req.user.id }).sort({ createdAt: -1 });
   return res.ok({ items });
 }));
 
-// 내 포트폴리오 조회
-router.get('/mine', auth, requireRole('showhost', 'brand', 'admin'), asyncHandler(async (req, res) => {
-  const doc = await Portfolio.findOne({ user: req.user.id });
-  if (!doc) return res.fail('포트폴리오가 없습니다.', 'PORTFOLIO_NOT_FOUND', 404);
-  return res.ok({ data: doc });
+/**
+ * @route   POST /api/v1/portfolios
+ * @desc    새 포트폴리오 생성 (신설)
+ * @access  Private (Showhost)
+ */
+router.post('/', auth, requireRole('showhost'), asyncHandler(async (req, res) => {
+  // 중요: 요청 본문(req.body)에 현재 로그인된 사용자 ID를 추가하여 문서를 생성합니다.
+  const payload = { ...req.body, user: req.user.id };
+  const created = await Portfolio.create(payload);
+  return res.ok({ message: '포트폴리오가 성공적으로 생성되었습니다.', data: created }, 201);
 }));
 
-// 생성 (쇼호스트 전용)
-router.post('/',
-  auth, requireRole('showhost'),
-  body('name').isLength({ min: 1 }),
-  asyncHandler(async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.fail('유효성 오류', 'VALIDATION_FAILED', 422, { errors: errors.array() });
-
-    const exists = await Portfolio.findOne({ user: req.user.id });
-    if (exists) return res.fail('이미 포트폴리오가 존재합니다.', 'PORTFOLIO_DUP', 400);
-
-    const payload = { ...req.body, user: req.user.id };
-    const created = await Portfolio.create(payload);
-    return res.ok({ message: '포트폴리오 생성', data: created }, 201);
-  })
-);
-
-// 내 포트폴리오 생성 및 수정
-router.put('/my', auth, requireRole('showhost'), asyncHandler(async (req, res) => {
-  const updated = await Portfolio.findOneAndUpdate(
-    { user: req.user.id }, // 현재 로그인된 사용자를 조건으로
-    { $set: { ...req.body, user: req.user.id } }, // 전달받은 데이터로 덮어쓰기
-    { new: true, upsert: true } // 옵션: 없으면 생성(upsert), 반환값은 최신화(new)
-  );
-  return res.ok({ message: '포트폴리오가 성공적으로 저장되었습니다.', data: updated });
-}));
-
-// 수정
-router.put('/:id', auth, requireRole('showhost', 'admin'), asyncHandler(async (req, res) => {
+/**
+ * @route   PUT /api/v1/portfolios/:id
+ * @desc    특정 포트폴리오 수정 (역할 변경)
+ * @access  Private (Showhost)
+ */
+router.put('/:id', auth, requireRole('showhost'), asyncHandler(async (req, res) => {
+  // 중요: portfolioId와 user.id가 모두 일치하는 문서를 찾아 수정합니다.
+  // 이를 통해 다른 사람의 포트폴리오를 수정하는 것을 방지합니다.
   const updated = await Portfolio.findOneAndUpdate(
     { _id: req.params.id, user: req.user.id },
     { $set: req.body },
-    { new: true }
+    { new: true } // 수정된 후의 문서를 반환하도록 설정
   );
-  if (!updated) return res.fail('수정 권한이 없거나 존재하지 않습니다.', 'PORTFOLIO_FORBIDDEN_EDIT', 403);
-  return res.ok({ message: '수정 완료', data: updated });
+
+  if (!updated) {
+    return res.fail('수정 권한이 없거나 존재하지 않는 포트폴리오입니다.', 'FORBIDDEN_EDIT', 403);
+  }
+  return res.ok({ message: '성공적으로 수정되었습니다.', data: updated });
 }));
 
-// 삭제 (내 포트폴리오)
-router.delete('/mine', auth, requireRole('showhost', 'admin'), asyncHandler(async (req, res) => {
-  const removed = await Portfolio.findOneAndDelete({ user: req.user.id });
-  if (!removed) return res.fail('삭제할 포트폴리오가 없습니다.', 'PORTFOLIO_NOT_FOUND', 404);
-  return res.ok({ message: '삭제 완료' });
+/**
+ * @route   DELETE /api/v1/portfolios/:id
+ * @desc    특정 포트폴리오 삭제 (신설)
+ * @access  Private (Showhost)
+ */
+router.delete('/:id', auth, requireRole('showhost'), asyncHandler(async (req, res) => {
+  // 중요: 수정과 마찬가지로, portfolioId와 user.id가 모두 일치해야만 삭제가 가능합니다.
+  const removed = await Portfolio.findOneAndDelete({ _id: req.params.id, user: req.user.id });
+
+  if (!removed) {
+    return res.fail('삭제 권한이 없거나 존재하지 않는 포트폴리오입니다.', 'FORBIDDEN_DELETE', 403);
+  }
+  return res.ok({ message: '성공적으로 삭제되었습니다.' });
 }));
 
-// 공개 포트폴리오 상세 조회
+
+// ----------------------------------------------------------------
+// [기존 API] 외부 공개용 포트폴리오 조회
+// ----------------------------------------------------------------
+
+/**
+ * @route   GET /api/v1/portfolios
+ * @desc    공개된 모든 포트폴리오 리스트 조회 (기존 기능 유지)
+ * @access  Public
+ */
+router.get('/', asyncHandler(async (req, res) => {
+  const page = Math.max(parseInt(req.query.page||'1'),1);
+  const limit = Math.min(parseInt(req.query.limit||'20'), 50);
+
+  const query = { publicScope: '전체공개', status: 'published' }; // 공개 조건
+  // (필요 시 기존 검색 로직 추가)
+
+  const items = await Portfolio.find(query)
+    .sort({ createdAt: -1 })
+    .skip((page-1)*limit)
+    .limit(limit)
+    .select('nickname oneLineIntro mainThumbnailUrl tags experienceYears'); // 목록에 필요한 필드만 선택
+
+  return res.ok({ items });
+}));
+
+/**
+ * @route   GET /api/v1/portfolios/:id
+ * @desc    특정 공개 포트폴리오 상세 조회 (기존 기능 유지)
+ * @access  Public
+ */
 router.get('/:id', asyncHandler(async (req, res) => {
-  const doc = await Portfolio.findOne({ _id: req.params.id, isPublic: true });
-  if (!doc) return res.fail('포트폴리오가 없거나 비공개 상태입니다.', 'NOT_FOUND', 404);
+  // 중요: _id로 문서를 찾고, 공개 조건(publicScope, status)을 만족하는지 확인합니다.
+  const doc = await Portfolio.findOne({
+    _id: req.params.id,
+    publicScope: '전체공개',
+    status: 'published'
+  });
+
+  if (!doc) {
+    return res.fail('포트폴리오가 없거나 비공개 상태입니다.', 'NOT_FOUND', 404);
+  }
   return res.ok({ data: doc });
 }));
 

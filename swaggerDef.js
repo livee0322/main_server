@@ -229,7 +229,7 @@ const options = {
           responses: { '200': { description: '조회 성공' } }
         },
         post: {
-          summary: "내 포트폴리오 생성",
+          summary: "내 포트폴리오 생성 (신규)",
           tags: ["Portfolios"],
           security: [{ bearerAuth: [] }],
           requestBody: {
@@ -238,69 +238,44 @@ const options = {
                 schema: {
                   type: 'object',
                   properties: {
-                    name: { type: 'string' }
+                    nickname: { type: 'string' }
                   }
                 }
               }
             }
           },
-          responses: { '201': { description: '생성 성공' }, '400': { description: '이미 존재함' } }
+          responses: { '201': { description: '생성 성공' } }
         }
       },
-      '/portfolios/mine': {
+      '/portfolios/my/list': {
         get: {
-          summary: "내 포트폴리오 조회",
+          summary: "내 모든 포트폴리오 목록 조회 (신규)",
           tags: ["Portfolios"],
           security: [{ bearerAuth: [] }],
-          responses: { '200': { description: '조회 성공' }, '404': { description: '포트폴리오 없음' } }
-        },
-        delete: {
-          summary: "내 포트폴리오 삭제",
-          tags: ["Portfolios"],
-          security: [{ bearerAuth: [] }],
-          responses: { '200': { description: '삭제 성공' }, '404': { description: '포트폴리오 없음' } }
-        }
-      },
-      '/portfolios/my': {
-        put: {
-          summary: "내 포트폴리오 생성 또는 전체 수정 (Upsert)",
-          tags: ["Portfolios"],
-          security: [{ bearerAuth: [] }],
-          requestBody: {
-            description: "포트폴리오 전체 데이터. 필드를 생략하면 해당 데이터가 삭제되거나 초기화될 수 있습니다.",
-            required: true,
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    nickname: { type: 'string', example: '라이브 여신' },
-                    oneLineIntro: { type: 'string', example: '뷰티 전문 쇼호스트입니다.' },
-                    detailedIntro: { type: 'string', example: '상세 소개 내용입니다.' },
-                    experienceYears: { type: 'number', example: 5 },
-                    mainThumbnailUrl: { type: 'string', example: 'https://...' },
-                    tags: { type: 'array', items: { type: 'string' }, example: ['뷰티', '패션'] },
-                    status: { type: 'string', enum: ['published'], example: 'published' }
-                  }
-                }
-              }
-            }
-          },
-          responses: {
-            '200': { description: '성공적으로 저장됨' },
-            '401': { description: '인증 실패 (로그인 필요)' },
-            '403': { description: '권한 없음 (쇼호스트 계정이 아님)' }
-          }
+          responses: { '200': { description: '조회 성공' } }
         }
       },
       '/portfolios/{id}': {
+        get: {
+          summary: "공개 포트폴리오 상세 조회",
+          tags: ["Portfolios"],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: '조회 성공' }, '404': { description: '포트폴리오 없음' } }
+        },
         put: {
-          summary: "내 포트폴리오 수정",
+          summary: "내 특정 포트폴리오 수정",
           tags: ["Portfolios"],
           security: [{ bearerAuth: [] }],
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
           requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
           responses: { '200': { description: '수정 성공' }, '403': { description: '권한 없음' } }
+        },
+        delete: {
+          summary: "내 특정 포트폴리오 삭제 (신규)",
+          tags: ["Portfolios"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: '삭제 성공' }, '403': { description: '권한 없음' } }
         }
       },
       // ===== Uploads =====
