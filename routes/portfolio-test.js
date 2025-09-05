@@ -20,7 +20,7 @@ const sanitize = (html='') => sanitizeHtml(html, {
 function normalizePayload(p){
   const out = { ...(p||{}) };
 
-  // 레거시 키 들어와도 여기서 흡수하고 즉시 제거
+  // 혹시 들어온 레거시 키는 흡수 후 즉시 제거
   if (out.name && !out.nickname) out.nickname = out.name;
   if (out.displayName && !out.nickname) out.nickname = out.displayName;
   if (out.mainThumbnail && !out.mainThumbnailUrl) out.mainThumbnailUrl = out.mainThumbnail;
@@ -30,11 +30,8 @@ function normalizePayload(p){
 
   if (out.bio) out.bio = sanitize(String(out.bio));
 
-  if (Array.isArray(out.tags))
-    out.tags = [...new Set(out.tags.map(t=>String(t).trim()).filter(Boolean))].slice(0,8);
-
-  if (Array.isArray(out.subThumbnails))
-    out.subThumbnails = out.subThumbnails.filter(Boolean).slice(0,5);
+  if (Array.isArray(out.tags)) out.tags = [...new Set(out.tags.map(t=>String(t).trim()).filter(Boolean))].slice(0,8);
+  if (Array.isArray(out.subThumbnails)) out.subThumbnails = out.subThumbnails.filter(Boolean).slice(0,5);
 
   if (Array.isArray(out.liveLinks)){
     out.liveLinks = out.liveLinks.map(l=>({
@@ -50,7 +47,6 @@ function normalizePayload(p){
   out.type = 'portfolio';
   out.visibility = out.visibility || 'public';
   out.status = out.status || 'draft';
-
   return out;
 }
 
@@ -116,7 +112,7 @@ function sendValidationIfAny(req,res,next){
   return res.status(422).json({ ok:false, code:'VALIDATION_FAILED', details: v.array({ onlyFirstError:true }) });
 }
 
-// 발행 시 필수( bio 길이 제한 없음 )
+// 발행 시 필수( bio 최소글자 제한 제거 )
 function publishedGuard(req,res,next){
   const p = req.body || {};
   if ((p.status || 'draft') !== 'published') return next();
@@ -138,9 +134,7 @@ router.post('/',
   publishedGuard,
   async (req,res)=>{
     try{
-      const payload = normalizePayload(req.body);
-      payload.createdBy = req.user.id;
-      const created = await Portfolio.create(payload);
+      const created = await Portfolio.create({ ...normalizePayload(req.body), createdBy: req.user.id });
       res.status(201).json({ data: toClient(created) });
     }catch(err){
       console.error('[portfolio-test:create]', err);
@@ -163,8 +157,8 @@ router.get('/',
       if (req.query.mine==='1' || req.query.mine==='true'){
         if (!req.user) return res.status(401).json({ ok:false, message:'UNAUTHORIZED' });
         q.createdBy = req.user.id;
-      }else{
-        q.status='published';
+      } else {
+        q.status = 'published';
         q.visibility = { $in:['public','unlisted'] };
       }
       if (req.query.status) q.status = req.query.status;
@@ -211,10 +205,9 @@ router.put('/:id',
     const { id } = req.params;
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
     try{
-      const payload = normalizePayload(req.body);
       const updated = await Portfolio.findOneAndUpdate(
-        { _id:id, createdBy: req.user.id },
-        { $set: payload },
+        { _id:id, createdBy:req.user.id },
+        { $set: normalizePayload(req.body) },
         { new:true }
       );
       if (!updated) return res.status(403).json({ ok:false, message:'FORBIDDEN_EDIT' });
