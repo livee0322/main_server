@@ -60,23 +60,34 @@ function normalizePayload(p){
   return out;
 }
 
-// 발행 시 필수 체크
+// 발행 시 필수 체크(초간단)
 function publishedGuard(req, res, next){
   const p = req.body || {};
   if ((p.status || 'draft') !== 'published') return next();
 
   const errs = [];
-  if (!p.nickname)        errs.push({ param:'nickname',        msg:'REQUIRED' });
-  if (!p.headline)        errs.push({ param:'headline',        msg:'REQUIRED' });
-  if (!p.mainThumbnailUrl)errs.push({ param:'mainThumbnailUrl',msg:'REQUIRED' });
+  if (!p.nickname)         errs.push({ param:'nickname',         msg:'REQUIRED' });
+  if (!p.headline)         errs.push({ param:'headline',         msg:'REQUIRED' });
+  if (!p.mainThumbnailUrl) errs.push({ param:'mainThumbnailUrl', msg:'REQUIRED' });
   if (!p.bio || String(p.bio).trim().length < 50) errs.push({ param:'bio', msg:'MIN_50' });
 
   if (errs.length) return res.status(422).json({ ok:false, code:'VALIDATION_FAILED', details: errs });
   next();
 }
 
-// ===== 검증 스키마 (draft 허용, publish는 publishedGuard가 추가 체크) =====
+/* ===== ultra-tolerant validators ===== */
 const opt = { checkFalsy: true, nullable: true };
+
+// http(s):// 시작만 확인(Cloudinary 변환 경로 포함 허용)
+const isHttpish = (v) => {
+  if (v === undefined || v === null || v === '') return true;
+  return /^https?:\/\//i.test(String(v));
+};
+
+// boolean 어떤 형태든 OK → true/false 로 변환
+const anyBool = (v) =>
+  v === true || v === false || v === 'true' || v === 'false' || v === 1 || v === 0 || v === '1' || v === '0';
+
 const baseSchema = [
   body('status').optional().isIn(['draft','published']),
   body('visibility').optional().isIn(['public','unlisted','private']),
@@ -85,47 +96,36 @@ const baseSchema = [
   body('headline').optional(opt).isString().trim().isLength({ max:120 }),
   body('bio').optional(opt).isString().isLength({ max:5000 }),
 
-  body('mainThumbnailUrl').optional(opt)
-    .isURL({ protocols:['http','https'], require_protocol:true }),
-  body('coverImageUrl').optional(opt)
-    .isURL({ protocols:['http','https'], require_protocol:true }),
+  body('mainThumbnailUrl').optional(opt).custom(isHttpish),
+  body('coverImageUrl').optional(opt).custom(isHttpish),
 
   body('subThumbnails').optional().isArray({ max:5 }),
-  body('subThumbnails.*').optional(opt)
-    .isURL({ protocols:['http','https'], require_protocol:true }),
+  body('subThumbnails.*').optional(opt).custom(isHttpish),
 
   body('tags').optional().isArray({ max:8 }),
   body('tags.*').optional(opt).isString().trim().isLength({ max:30 }),
 
   body('liveLinks').optional().isArray({ max:50 }),
   body('liveLinks.*.title').optional(opt).isString().trim().isLength({ max:120 }),
-  body('liveLinks.*.url').optional(opt)
-    .isURL({ protocols:['http','https'], require_protocol:true }),
+  body('liveLinks.*.url').optional(opt).custom(isHttpish),
   body('liveLinks.*.date').optional(opt).isISO8601().toDate(),
 
   body('careerYears').optional({ checkFalsy:true }).isInt({ min:0, max:50 }).toInt(),
   body('age').optional({ checkFalsy:true }).isInt({ min:14, max:99 }).toInt(),
   body('realName').optional(opt).isString().trim().isLength({ max:80 }),
 
-  // ✅ boolean: 원시 boolean/문자열/0/1 모두 허용
-  body('realNamePublic').optional().custom(v =>
-    v === true || v === false || v === 'true' || v === 'false' || v === 1 || v === 0 || v === '1' || v === '0'
-  ).toBoolean(),
-  body('agePublic').optional().custom(v =>
-    v === true || v === false || v === 'true' || v === 'false' || v === 1 || v === 0 || v === '1' || v === '0'
-  ).toBoolean(),
-  body('openToOffers').optional().custom(v =>
-    v === true || v === false || v === 'true' || v === 'false' || v === 1 || v === 0 || v === '1' || v === '0'
-  ).toBoolean(),
+  body('realNamePublic').optional().custom(anyBool).toBoolean(),
+  body('agePublic').optional().custom(anyBool).toBoolean(),
+  body('openToOffers').optional().custom(anyBool).toBoolean(),
 
-  body('primaryLink').optional(opt)
-    .isURL({ protocols:['http','https'], require_protocol:true }),
+  body('primaryLink').optional(opt).custom(isHttpish),
 ];
 
 function sendValidationIfAny(req, res, next){
   const v = validationResult(req);
   if (v.isEmpty()) return next();
   const details = v.array();
+  // ✅ 반드시 로그 남김
   console.warn('[portfolio-test:validation]', JSON.stringify({ details, body: req.body }, null, 2));
   return res.status(422).json({ ok:false, code:'VALIDATION_FAILED', details });
 }
