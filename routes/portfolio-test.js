@@ -1,38 +1,39 @@
-// routes/portfolio-test.js
+// routes/portfolio.js
 'use strict';
 
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
-const mongoose = require('mongoose');
 const sanitizeHtml = require('sanitize-html');
-
-// ✅ 테스트용 모델 파일 사용 (models/Portfolio-test.js)
-const Portfolio = require('../models/Portfolio-test');
+const mongoose = require('mongoose');
 
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
+const Portfolio = require('../models/Portfolio');
 
-// sanitize helper
+// ── helpers ────────────────────────────────────────────────────────────────
+const optionalAuth = auth.optional ? auth.optional() : (req,res,next)=>next();
+
 const sanitize = (html='') => sanitizeHtml(html, {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img','h1','h2','u','span','figure','figcaption']),
   allowedAttributes: { '*': ['style','class','id','src','href','alt','title'] },
   allowedSchemes: ['http','https','data','mailto','tel'],
 });
 
-// 공개 발행 시 필수 체크
-function pubChecks(p){
-  const errors = [];
-  if (!p.nickname)        errors.push({ field:'nickname',        msg:'닉네임은 필수입니다.' });
-  if (!p.headline)        errors.push({ field:'headline',        msg:'한 줄 소개는 필수입니다.' });
-  if (!p.mainThumbnailUrl)errors.push({ field:'mainThumbnailUrl',msg:'메인 썸네일을 업로드해주세요.' });
-  return errors;
+// 구버전 필드명을 캐논 필드로 매핑
+function compatBody(b){
+  const out = { ...b };
+  if (out.displayName && !out.nickname) out.nickname = out.displayName;
+  if (out.mainThumbnail && !out.mainThumbnailUrl) out.mainThumbnailUrl = out.mainThumbnail;
+  if (out.coverImage && !out.coverImageUrl) out.coverImageUrl = out.coverImage;
+  if (out.subImages && !out.subThumbnails) out.subThumbnails = out.subImages;
+  return out;
 }
 
-// payload 정리
+// 정규화(길이/중복/타입 보정)
 function normalizePayload(p){
   const out = { ...p };
 
-  if (out.bio) out.bio = sanitize(out.bio);
+  if (out.bio) out.bio = sanitize(String(out.bio));
 
   if (Array.isArray(out.tags)) {
     out.tags = [...new Set(out.tags.map(t => String(t).trim()).filter(Boolean))].slice(0, 8);
@@ -43,16 +44,16 @@ function normalizePayload(p){
   if (Array.isArray(out.liveLinks)) {
     out.liveLinks = out.liveLinks
       .map(l => ({
-        title: l.title?.trim(),
-        url:   l.url?.trim(),
-        date:  l.date ? new Date(l.date) : undefined
+        title: l?.title ? String(l.title).trim() : '',
+        url:   l?.url   ? String(l.url).trim()   : '',
+        date:  l?.date  ? new Date(l.date)       : undefined
       }))
       .filter(l => l.title || l.url);
   }
+
   if (out.careerYears !== undefined) out.careerYears = Number(out.careerYears);
   if (out.age         !== undefined) out.age         = Number(out.age);
 
-  // 기본값 보강
   out.type = 'portfolio';
   out.visibility = out.visibility || 'public';
   out.status = out.status || 'draft';
@@ -60,39 +61,85 @@ function normalizePayload(p){
   return out;
 }
 
-// -------- Create --------
-router.post(
-  '/',
-  auth,
-  requireRole('showhost', 'admin'),
-  body('nickname').isString().trim().notEmpty(),
-  body('headline').isString().trim().notEmpty(),
+// 상태가 published일 때 필수/추가 검증
+function publishedGuard(req, res, next){
+  const p = req.body;
+  const status = p.status || 'draft';
+  if (status !== 'published') return next();
+
+  const errs = [];
+  if (!p.nickname) errs.push({ param:'nickname', msg:'REQUIRED' });
+  if (!p.headline) errs.push({ param:'headline', msg:'REQUIRED' });
+  if (!p.mainThumbnailUrl) errs.push({ param:'mainThumbnailUrl', msg:'REQUIRED' });
+  if (!p.bio || String(p.bio).trim().length < 50) errs.push({ param:'bio', msg:'MIN_50' });
+
+  if (errs.length) return res.status(422).json({ ok:false, message:'VALIDATION_FAILED', details: errs });
+  next();
+}
+
+// 공통 스키마(드래프트/발행 공통 규칙)
+const baseSchema = [
   body('status').optional().isIn(['draft','published']),
+  body('visibility').optional().isIn(['public','unlisted','private']),
+
+  body('nickname').optional().isString().trim().isLength({ min:1, max:80 }),
+  body('headline').optional().isString().trim().isLength({ min:1, max:120 }),
+  body('bio').optional().isString().isLength({ max:5000 }),
+
+  body('mainThumbnailUrl').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+  body('coverImageUrl').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+
+  body('subThumbnails').optional().isArray({ max:5 }),
+  body('subThumbnails.*').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+
+  body('tags').optional().isArray({ max:8 }),
+  body('tags.*').optional().isString().trim().isLength({ min:1, max:30 }),
+
+  body('liveLinks').optional().isArray({ max:50 }),
+  body('liveLinks.*.title').optional().isString().trim().isLength({ max:120 }),
+  body('liveLinks.*.url').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+  body('liveLinks.*.date').optional().isISO8601().toDate(),
+
+  body('careerYears').optional().isInt({ min:0, max:50 }).toInt(),
+  body('age').optional().isInt({ min:14, max:99 }).toInt(),
+  body('realName').optional().isString().trim().isLength({ max:80 }),
+  body('realNamePublic').optional().isBoolean().toBoolean(),
+  body('agePublic').optional().isBoolean().toBoolean(),
+  body('openToOffers').optional().isBoolean().toBoolean(),
+  body('primaryLink').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+];
+
+// 표준 에러 응답
+function sendValidationIfAny(req, res, next){
+  const v = validationResult(req);
+  if (v.isEmpty()) return next();
+  return res.status(422).json({ ok:false, message:'VALIDATION_FAILED', details: v.array() });
+}
+
+// ── Routes ────────────────────────────────────────────────────────────────
+
+// Create
+router.post('/',
+  auth,
+  requireRole('showhost','admin'),
+  (req, _res, next)=>{ req.body = compatBody(req.body); next(); },
+  baseSchema,
+  sendValidationIfAny,
+  publishedGuard,
   async (req, res) => {
-    const v = validationResult(req);
-    if (!v.isEmpty()) {
-      return res.status(422).json({ ok:false, message:'VALIDATION_FAILED', details: v.array() });
-    }
-
     try{
-      const payload = normalizePayload({ ...req.body });
-      payload.createdBy = req.user.id; // ✅ 옵션 B: createdBy만 사용
-
-      if (payload.status === 'published') {
-        const errs = pubChecks(payload);
-        if (errs.length) return res.status(422).json({ ok:false, message:'VALIDATION_FAILED', details: errs });
-      }
+      const payload = normalizePayload(req.body || {});
+      payload.createdBy = req.user.id;
 
       const created = await Portfolio.create(payload);
       return res.status(201).json({ data: created });
     }catch(err){
-      console.error('[portfolio-test:create]', err);
-      // 과거 user_1 유니크 인덱스가 남아있을 때를 위한 안내
+      console.error('[portfolio:create]', err);
       if (err?.code === 11000 && String(err?.message||'').includes('user_1')) {
         return res.status(409).json({
           ok:false,
           message:'DUP_INDEX_USER_1',
-          hint:'기존 user_1 유니크 인덱스가 남아 있습니다. mongo 콘솔에서 db.portfolios.dropIndex("user_1") 실행 후 재시도하세요.'
+          hint:'기존 user_1 유니크 인덱스가 남아 있습니다. db.portfolios.dropIndex("user_1") 후 재시도하세요.'
         });
       }
       return res.status(500).json({ ok:false, message: err.message || 'CREATE_FAILED' });
@@ -100,12 +147,8 @@ router.post(
   }
 );
 
-// 선택 인증 미들웨어 (없으면 no-op)
-const optionalAuth = auth.optional ? auth.optional() : (req,res,next)=>next();
-
-// -------- List (공개/내 것) --------
-router.get(
-  '/',
+// List (mine=1 이면 본인 것, 아니면 공개물만)
+router.get('/',
   optionalAuth,
   query('status').optional().isIn(['draft','published']),
   query('mine').optional().isIn(['1','true']),
@@ -132,13 +175,13 @@ router.get(
 
       return res.json({ items, page, limit, total, totalPages: Math.ceil(total/limit) });
     }catch(err){
-      console.error('[portfolio-test:list]', err);
+      console.error('[portfolio:list]', err);
       return res.status(500).json({ ok:false, message: err.message || 'LIST_FAILED' });
     }
   }
 );
 
-// -------- Read --------
+// Read
 router.get('/:id', optionalAuth, async (req, res) => {
   const { id } = req.params;
   if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
@@ -153,51 +196,58 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
     return res.json({ data: doc });
   }catch(err){
-    console.error('[portfolio-test:read]', err);
+    console.error('[portfolio:read]', err);
     return res.status(500).json({ ok:false, message: err.message || 'READ_FAILED' });
   }
 });
 
-// -------- Update --------
-router.put('/:id', auth, requireRole('showhost','admin'), async (req, res) => {
-  const { id } = req.params;
-  if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
+// Update
+router.put('/:id',
+  auth,
+  requireRole('showhost','admin'),
+  (req, _res, next)=>{ req.body = compatBody(req.body); next(); },
+  baseSchema,
+  sendValidationIfAny,
+  publishedGuard,
+  async (req, res) => {
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
 
-  try{
-    const payload = normalizePayload(req.body || {});
+    try{
+      const payload = normalizePayload(req.body || {});
 
-    if (payload.status === 'published') {
-      const errs = pubChecks(payload);
-      if (errs.length) return res.status(422).json({ ok:false, message:'VALIDATION_FAILED', details: errs });
+      const updated = await Portfolio.findOneAndUpdate(
+        { _id:id, createdBy: req.user.id },
+        { $set: payload },
+        { new:true }
+      );
+      if (!updated) return res.status(403).json({ ok:false, message:'FORBIDDEN_EDIT' });
+
+      return res.json({ data: updated });
+    }catch(err){
+      console.error('[portfolio:update]', err);
+      return res.status(500).json({ ok:false, message: err.message || 'UPDATE_FAILED' });
     }
-
-    const updated = await Portfolio.findOneAndUpdate(
-      { _id:id, createdBy: req.user.id },
-      { $set: payload },
-      { new:true }
-    );
-    if (!updated) return res.status(403).json({ ok:false, message:'FORBIDDEN_EDIT' });
-
-    return res.json({ data: updated });
-  }catch(err){
-    console.error('[portfolio-test:update]', err);
-    return res.status(500).json({ ok:false, message: err.message || 'UPDATE_FAILED' });
   }
-});
+);
 
-// -------- Delete --------
-router.delete('/:id', auth, requireRole('showhost','admin'), async (req,res)=>{
-  const { id } = req.params;
-  if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
+// Delete
+router.delete('/:id',
+  auth,
+  requireRole('showhost','admin'),
+  async (req,res)=>{
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
 
-  try{
-    const removed = await Portfolio.findOneAndDelete({ _id:id, createdBy:req.user.id });
-    if (!removed) return res.status(404).json({ ok:false, message:'NOT_FOUND_OR_FORBIDDEN' });
-    return res.json({ message:'삭제 완료' });
-  }catch(err){
-    console.error('[portfolio-test:delete]', err);
-    return res.status(500).json({ ok:false, message: err.message || 'DELETE_FAILED' });
+    try{
+      const removed = await Portfolio.findOneAndDelete({ _id:id, createdBy:req.user.id });
+      if (!removed) return res.status(404).json({ ok:false, message:'NOT_FOUND_OR_FORBIDDEN' });
+      return res.json({ message:'삭제 완료' });
+    }catch(err){
+      console.error('[portfolio:delete]', err);
+      return res.status(500).json({ ok:false, message: err.message || 'DELETE_FAILED' });
+    }
   }
-});
+);
 
 module.exports = router;
