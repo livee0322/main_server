@@ -1,25 +1,27 @@
-// models/Portfolio-test.js
+// models/Portfolio.js
 'use strict';
-const { Schema, model, Types } = require('mongoose');
+
+const mongoose = require('mongoose');
+const { Schema, Types } = mongoose;
 
 const PortfolioSchema = new Schema({
-  type: { type: String, default: 'portfolio', index: true },
-  status: { type: String, enum: ['draft','published'], default: 'draft', index: true },
-  visibility: { type: String, enum: ['public','unlisted','private'], default: 'public', index: true },
+  type:        { type: String, default: 'portfolio', index: true },
+  status:      { type: String, enum: ['draft','published'], default: 'draft', index: true },
+  visibility:  { type: String, enum: ['public','unlisted','private'], default: 'public', index: true },
 
-  nickname: { type: String, required: true, trim: true },
-  headline: { type: String, required: true, trim: true },
-  bio: { type: String, default: '' },
+  nickname:    { type: String, required: true, trim: true },
+  headline:    { type: String, required: true, trim: true },
+  bio:         { type: String, default: '' },
 
   mainThumbnailUrl: { type: String, default: '' },
-  coverImageUrl: { type: String, default: '' },
-  subThumbnails: { type: [String], default: [] },
+  coverImageUrl:    { type: String, default: '' },
+  subThumbnails:    { type: [String], default: [] },
 
-  realName: { type: String, default: '' },
-  realNamePublic: { type: Boolean, default: false },
-  age: { type: Number },
-  agePublic: { type: Boolean, default: false },
-  careerYears: { type: Number },
+  realName:        { type: String, default: '' },
+  realNamePublic:  { type: Boolean, default: false },
+  age:             { type: Number },
+  agePublic:       { type: Boolean, default: false },
+  careerYears:     { type: Number },
 
   primaryLink: { type: String, default: '' },
   liveLinks: [{
@@ -28,13 +30,14 @@ const PortfolioSchema = new Schema({
     date:  { type: Date }
   }],
 
-  tags: { type: [String], default: [] },
-  openToOffers: { type: Boolean, default: true },
+  tags:        { type: [String], default: [] },
+  openToOffers:{ type: Boolean, default: true },
 
-  createdBy: { type: Types.ObjectId, ref: 'User', required: true, index: true }, // ✅ unique 제거
+  createdBy:   { type: Types.ObjectId, ref: 'User', required: true, index: true },
 }, { timestamps: true });
 
 PortfolioSchema.index({ createdAt: -1 });
 PortfolioSchema.index({ status: 1, visibility: 1, createdAt: -1 });
 
-module.exports = model('Portfolio', PortfolioSchema);
+module.exports = mongoose.models.Portfolio
+  || mongoose.model('Portfolio', PortfolioSchema);
