@@ -1,18 +1,19 @@
-// routes/portfolio-
-test.js
+// routes/portfolio-test.js
 'use strict';
 
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
-const sanitizeHtml = require('sanitize-html');
 const mongoose = require('mongoose');
+const sanitizeHtml = require('sanitize-html');
 
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
-const Portfolio = require('../models/Portfolio');
 
-/* ───────────────── helpers ───────────────── */
-const optionalAuth = auth.optional ? auth.optional() : (req,res,next)=>next();
+// ✅ 테스트용 모델
+const Portfolio = require('../models/Portfolio-test');
+
+/* ───────── helpers ───────── */
+const optionalAuth = auth.optional ? auth.optional() : (_req,_res,next)=>next();
 
 const sanitize = (html='') => sanitizeHtml(html, {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img','h1','h2','u','span','figure','figcaption']),
@@ -47,7 +48,7 @@ function normalizePayload(p){
       .map(l => ({
         title: l?.title ? String(l.title).trim() : '',
         url:   l?.url   ? String(l.url).trim()   : '',
-        date:  l?.date  ? new Date(l.date)       : undefined
+        date:  l?.date  ? new Date(l.date)       : undefined,
       }))
       .filter(l => l.title || l.url);
   }
@@ -62,23 +63,20 @@ function normalizePayload(p){
   return out;
 }
 
-// 발행 시 필수 체크
+// 발행 시 필수 체크(닉네임/헤드라인/메인썸네일/소개 50자↑)
 function publishedGuard(req, res, next){
   const p = req.body || {};
-  const status = p.status || 'draft';
-  if (status !== 'published') return next();
-
+  if ((p.status || 'draft') !== 'published') return next();
   const errs = [];
   if (!p.nickname) errs.push({ param:'nickname', msg:'REQUIRED' });
   if (!p.headline) errs.push({ param:'headline', msg:'REQUIRED' });
   if (!p.mainThumbnailUrl) errs.push({ param:'mainThumbnailUrl', msg:'REQUIRED' });
   if (!p.bio || String(p.bio).trim().length < 50) errs.push({ param:'bio', msg:'MIN_50' });
-
   if (errs.length) return res.status(422).json({ ok:false, message:'VALIDATION_FAILED', details: errs });
   next();
 }
 
-// ── 공통 검증 스키마 (draft에선 빈값 허용) ──
+// ── 공통 검증 스키마 (draft에서 빈값 허용) ──
 const opt = { checkFalsy: true, nullable: true };
 
 const baseSchema = [
@@ -118,32 +116,32 @@ const baseSchema = [
     .isURL({ protocols:['http','https'], require_protocol:true }),
 ];
 
-// 표준 에러 응답
 function sendValidationIfAny(req, res, next){
   const v = validationResult(req);
   if (v.isEmpty()) return next();
   return res.status(422).json({ ok:false, message:'VALIDATION_FAILED', details: v.array() });
 }
 
-/* ───────────────── Routes ───────────────── */
+/* ───────── Routes ───────── */
 
 // Create
 router.post('/',
   auth,
   requireRole('showhost','admin'),
-  (req, _res, next)=>{ req.body = compatBody(req.body); next(); },
+  (req,_res,next)=>{ req.body = compatBody(req.body); next(); },
   baseSchema,
   sendValidationIfAny,
   publishedGuard,
   async (req, res) => {
     try{
       const payload = normalizePayload(req.body || {});
-      payload.createdBy = req.user.id;
+      payload.createdBy = req.user.id; // 서버에서만 설정
 
       const created = await Portfolio.create(payload);
       return res.status(201).json({ data: created });
     }catch(err){
-      console.error('[portfolio:create]', err);
+      console.error('[portfolio-test:create]', err);
+      // 과거 user_1 인덱스 충돌 안내
       if (err?.code === 11000 && String(err?.message||'').includes('user_1')) {
         return res.status(409).json({
           ok:false,
@@ -156,7 +154,7 @@ router.post('/',
   }
 );
 
-// List
+// List (mine=1 이면 본인 것, 아니면 공개물)
 router.get('/',
   optionalAuth,
   query('status').optional().isIn(['draft','published']),
@@ -184,7 +182,7 @@ router.get('/',
 
       return res.json({ items, page, limit, total, totalPages: Math.ceil(total/limit) });
     }catch(err){
-      console.error('[portfolio:list]', err);
+      console.error('[portfolio-test:list]', err);
       return res.status(500).json({ ok:false, message: err.message || 'LIST_FAILED' });
     }
   }
@@ -205,7 +203,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
     return res.json({ data: doc });
   }catch(err){
-    console.error('[portfolio:read]', err);
+    console.error('[portfolio-test:read]', err);
     return res.status(500).json({ ok:false, message: err.message || 'READ_FAILED' });
   }
 });
@@ -214,7 +212,7 @@ router.get('/:id', optionalAuth, async (req, res) => {
 router.put('/:id',
   auth,
   requireRole('showhost','admin'),
-  (req, _res, next)=>{ req.body = compatBody(req.body); next(); },
+  (req,_res,next)=>{ req.body = compatBody(req.body); next(); },
   baseSchema,
   sendValidationIfAny,
   publishedGuard,
@@ -233,7 +231,7 @@ router.put('/:id',
 
       return res.json({ data: updated });
     }catch(err){
-      console.error('[portfolio:update]', err);
+      console.error('[portfolio-test:update]', err);
       return res.status(500).json({ ok:false, message: err.message || 'UPDATE_FAILED' });
     }
   }
@@ -252,7 +250,7 @@ router.delete('/:id',
       if (!removed) return res.status(404).json({ ok:false, message:'NOT_FOUND_OR_FORBIDDEN' });
       return res.json({ message:'삭제 완료' });
     }catch(err){
-      console.error('[portfolio:delete]', err);
+      console.error('[portfolio-test:delete]', err);
       return res.status(500).json({ ok:false, message: err.message || 'DELETE_FAILED' });
     }
   }
