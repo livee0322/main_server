@@ -6,18 +6,26 @@ const portfolioSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true
+      unique: true,
     },
-    name: { type: String, required: true },
-    statusMessage: { type: String },
-    jobTag: { type: String },
-    region: { type: String },
+    nickname: { type: String, trim: true },
+    oneLineIntro: { type: String, trim: true },
+    detailedIntro: { type: String },
     experienceYears: { type: Number },
-    introText: { type: String },
-    profileImage: { type: String, default: "" },
-    backgroundImage: { type: String, default: "" },
-    youtubeLinks: [String],
-    isPublic: { type: Boolean, default: true }
+    age: { type: Number },
+    mainLink: { type: String, trim: true },
+    mainThumbnailUrl: { type: String, trim: true },
+    backgroundImageUrl: { type: String, trim: true },
+    subThumbnailUrls: [{ type: String, trim: true }],
+    publicScope: { type: String, default: '전체공개' },
+    isReceivingOffers: { type: Boolean, default: true },
+    recentLives: [{
+      title: { type: String, trim: true },
+      url:   { type: String, trim: true },
+      date:  { type: Date }
+    }],
+    tags: [{ type: String, trim: true }],
+    status: { type: String, enum: ['draft','published'], default: 'draft' },
   },
   { timestamps: true }
 );

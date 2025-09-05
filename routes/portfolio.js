@@ -10,8 +10,8 @@ const asyncHandler = require('../src/middleware/asyncHandler'); // 비동기 핸
 
 // 공개 리스트 (홈/리스트)
 router.get('/', asyncHandler(async (req, res) => {
-  const page = Math.max(parseInt(req.query.page||'1'),1);
-  const limit = Math.min(parseInt(req.query.limit||'20'), 50);
+  const page = Math.max(parseInt(req.query.page || '1'), 1);
+  const limit = Math.min(parseInt(req.query.limit || '20'), 50);
 
   // 검색 조건을 담을 쿼리 객체
   const query = { isPublic: true };
@@ -27,14 +27,14 @@ router.get('/', asyncHandler(async (req, res) => {
   // 수정된 쿼리 객체 적용
   const items = await Portfolio.find({ isPublic: true })
     .sort({ createdAt: -1 })
-    .skip((page-1)*limit)
+    .skip((page - 1) * limit)
     .limit(limit)
     .select('name profileImage introText jobTag region experienceYears isPublic');
   return res.ok({ items });
 }));
 
 // 내 포트폴리오 조회
-router.get('/mine', auth, requireRole('showhost','brand','admin'), asyncHandler(async (req, res) => {
+router.get('/mine', auth, requireRole('showhost', 'brand', 'admin'), asyncHandler(async (req, res) => {
   const doc = await Portfolio.findOne({ user: req.user.id });
   if (!doc) return res.fail('포트폴리오가 없습니다.', 'PORTFOLIO_NOT_FOUND', 404);
   return res.ok({ data: doc });
@@ -57,8 +57,18 @@ router.post('/',
   })
 );
 
+// 내 포트폴리오 생성 및 수정
+router.put('/my', auth, requireRole('showhost'), asyncHandler(async (req, res) => {
+  const updated = await Portfolio.findOneAndUpdate(
+    { user: req.user.id }, // 현재 로그인된 사용자를 조건으로
+    { $set: { ...req.body, user: req.user.id } }, // 전달받은 데이터로 덮어쓰기
+    { new: true, upsert: true } // 옵션: 없으면 생성(upsert), 반환값은 최신화(new)
+  );
+  return res.ok({ message: '포트폴리오가 성공적으로 저장되었습니다.', data: updated });
+}));
+
 // 수정
-router.put('/:id', auth, requireRole('showhost','admin'), asyncHandler(async (req, res) => {
+router.put('/:id', auth, requireRole('showhost', 'admin'), asyncHandler(async (req, res) => {
   const updated = await Portfolio.findOneAndUpdate(
     { _id: req.params.id, user: req.user.id },
     { $set: req.body },
@@ -69,7 +79,7 @@ router.put('/:id', auth, requireRole('showhost','admin'), asyncHandler(async (re
 }));
 
 // 삭제 (내 포트폴리오)
-router.delete('/mine', auth, requireRole('showhost','admin'), asyncHandler(async (req, res) => {
+router.delete('/mine', auth, requireRole('showhost', 'admin'), asyncHandler(async (req, res) => {
   const removed = await Portfolio.findOneAndDelete({ user: req.user.id });
   if (!removed) return res.fail('삭제할 포트폴리오가 없습니다.', 'PORTFOLIO_NOT_FOUND', 404);
   return res.ok({ message: '삭제 완료' });

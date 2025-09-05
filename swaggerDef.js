@@ -26,15 +26,15 @@ const options = {
       },
     },
     tags: [
-        { name: "Users", description: "사용자 인증 및 정보" },
-        { name: "Campaigns", description: "캠페인 관리" },
-        { name: "Applications", description: "캠페인 지원서 관리" },
-        { name: "Portfolios", description: "쇼호스트 포트폴리오" },
-        { name: "Recruits", description: "구인/구직 공고 (신규)" },
-        { name: "Uploads", description: "파일 업로드" },
-        { name: "Scrape", description: "외부 URL 정보 스크래핑" },
-        { name: "Tracking", description: "사용자 행동 트래킹" },
-        { name: "Recruits (Compat)", description: "구버전 호환용 공고 API" },
+      { name: "Users", description: "사용자 인증 및 정보" },
+      { name: "Campaigns", description: "캠페인 관리" },
+      { name: "Applications", description: "캠페인 지원서 관리" },
+      { name: "Portfolios", description: "쇼호스트 포트폴리오" },
+      { name: "Recruits", description: "구인/구직 공고 (신규)" },
+      { name: "Uploads", description: "파일 업로드" },
+      { name: "Scrape", description: "외부 URL 정보 스크래핑" },
+      { name: "Tracking", description: "사용자 행동 트래킹" },
+      { name: "Recruits (Compat)", description: "구버전 호환용 공고 API" },
     ],
     paths: {
       // ===== Users =====
@@ -44,15 +44,19 @@ const options = {
           tags: ["Users"],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: {
-              type: 'object',
-              properties: {
-                name: { type: 'string', example: '라이비' },
-                email: { type: 'string', example: 'brand@example.com' },
-                password: { type: 'string', example: 'password123' },
-                role: { type: 'string', enum: ['brand', 'showhost'], example: 'brand' },
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string', example: '라이비' },
+                    email: { type: 'string', example: 'brand@example.com' },
+                    password: { type: 'string', example: 'password123' },
+                    role: { type: 'string', enum: ['brand', 'showhost'], example: 'brand' },
+                  }
+                }
               }
-            }}}
+            }
           },
           responses: { '201': { description: '회원가입 성공' } }
         }
@@ -63,13 +67,17 @@ const options = {
           tags: ["Users"],
           requestBody: {
             required: true,
-            content: { 'application/json': { schema: {
-              type: 'object',
-              properties: {
-                email: { type: 'string', example: 'brand@example.com' },
-                password: { type: 'string', example: 'password123' },
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    email: { type: 'string', example: 'brand@example.com' },
+                    password: { type: 'string', example: 'password123' },
+                  }
+                }
               }
-            }}}
+            }
           },
           responses: { '200': { description: '로그인 성공' } }
         }
@@ -102,162 +110,216 @@ const options = {
           requestBody: {
             description: "캠페인 생성에 필요한 정보",
             required: true,
-            content: { 'application/json': { schema: {
-                type: 'object',
-                properties: {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
                     type: { type: 'string', enum: ['product', 'recruit'] },
                     title: { type: 'string' }
+                  }
                 }
-            }}}
+              }
+            }
           },
           responses: { '201': { description: '생성 성공' } }
         }
       },
       '/campaigns/mine': {
-          get: {
-              summary: "내가 만든 캠페인 조회",
-              tags: ["Campaigns"],
-              security: [{ bearerAuth: [] }],
-              responses: { '200': { description: '조회 성공' } }
-          }
+        get: {
+          summary: "내가 만든 캠페인 조회",
+          tags: ["Campaigns"],
+          security: [{ bearerAuth: [] }],
+          responses: { '200': { description: '조회 성공' } }
+        }
       },
       '/campaigns/{id}': {
         get: {
-            summary: "캠페인 상세 조회",
-            tags: ["Campaigns"],
-            security: [{ bearerAuth: [] }],
-            parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }}],
-            responses: { '200': { description: '조회 성공' }, '404': { description: '캠페인 없음' } }
+          summary: "캠페인 상세 조회",
+          tags: ["Campaigns"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: '조회 성공' }, '404': { description: '캠페인 없음' } }
         },
         put: {
-            summary: "캠페인 수정",
-            tags: ["Campaigns"],
-            security: [{ bearerAuth: [] }],
-            parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }}],
-            requestBody: { content: { 'application/json': { schema: { type: 'object' }}} },
-            responses: { '200': { description: '수정 성공' }, '403': { description: '권한 없음' } }
+          summary: "캠페인 수정",
+          tags: ["Campaigns"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
+          responses: { '200': { description: '수정 성공' }, '403': { description: '권한 없음' } }
         },
         delete: {
-            summary: "캠페인 삭제",
-            tags: ["Campaigns"],
-            security: [{ bearerAuth: [] }],
-            parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }}],
-            responses: { '200': { description: '삭제 성공' }, '403': { description: '권한 없음' } }
+          summary: "캠페인 삭제",
+          tags: ["Campaigns"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: '삭제 성공' }, '403': { description: '권한 없음' } }
         }
       },
       // ===== Applications =====
       '/applications': {
-          get: {
-              summary: "캠페인 지원자 목록 조회 (소유자)",
-              tags: ["Applications"],
-              security: [{ bearerAuth: [] }],
-              parameters: [{ name: 'campaignId', in: 'query', required: true, schema: { type: 'string' }}],
-              responses: { '200': { description: '조회 성공' }, '403': { description: '권한 없음' } }
-          },
-          post: {
-              summary: "캠페인 지원서 제출",
-              tags: ["Applications"],
-              security: [{ bearerAuth: [] }],
-              requestBody: { content: { 'application/json': { schema: {
+        get: {
+          summary: "캠페인 지원자 목록 조회 (소유자)",
+          tags: ["Applications"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'campaignId', in: 'query', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: '조회 성공' }, '403': { description: '권한 없음' } }
+        },
+        post: {
+          summary: "캠페인 지원서 제출",
+          tags: ["Applications"],
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: {
                   type: 'object',
                   properties: {
-                      campaignId: { type: 'string' },
-                      profileRef: { type: 'string' },
-                      message: { type: 'string' }
+                    campaignId: { type: 'string' },
+                    profileRef: { type: 'string' },
+                    message: { type: 'string' }
                   }
-              }}}},
-              responses: { '201': { description: '제출 성공' }, '409': { description: '이미 지원함' } }
-          }
+                }
+              }
+            }
+          },
+          responses: { '201': { description: '제출 성공' }, '409': { description: '이미 지원함' } }
+        }
       },
       '/applications/mine': {
-          get: {
-              summary: "내 지원 현황 조회",
-              tags: ["Applications"],
-              security: [{ bearerAuth: [] }],
-              parameters: [{ name: 'campaignId', in: 'query', required: true, schema: { type: 'string' }}],
-              responses: { '200': { description: '조회 성공' } }
-          }
+        get: {
+          summary: "내 지원 현황 조회",
+          tags: ["Applications"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'campaignId', in: 'query', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: '조회 성공' } }
+        }
       },
       '/applications/{id}': {
-          patch: {
-              summary: "지원서 상태 변경 (소유자)",
-              tags: ["Applications"],
-              security: [{ bearerAuth: [] }],
-              parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }}],
-              requestBody: { content: { 'application/json': { schema: {
+        patch: {
+          summary: "지원서 상태 변경 (소유자)",
+          tags: ["Applications"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: {
                   type: 'object',
                   properties: {
-                      status: { type: 'string', enum: ['submitted','reviewing','shortlisted','accepted','rejected'] }
+                    status: { type: 'string', enum: ['submitted', 'reviewing', 'shortlisted', 'accepted', 'rejected'] }
                   }
-              }}}},
-              responses: { '200': { description: '변경 성공' }, '403': { description: '권한 없음' } }
-          }
+                }
+              }
+            }
+          },
+          responses: { '200': { description: '변경 성공' }, '403': { description: '권한 없음' } }
+        }
       },
       // ===== Portfolios =====
       '/portfolios': {
-          get: {
-              summary: "공개 포트폴리오 목록 조회",
-              tags: ["Portfolios"],
-              parameters: [
-                { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
-                { name: 'limit', in: 'query', schema: { type: 'integer', default: 20 } },
-              ],
-              responses: { '200': { description: '조회 성공' } }
-          },
-          post: {
-            summary: "내 포트폴리오 생성",
-            tags: ["Portfolios"],
-            security: [{ bearerAuth: [] }],
-            requestBody: { content: { 'application/json': { schema: {
-                type: 'object',
-                properties: {
+        get: {
+          summary: "공개 포트폴리오 목록 조회",
+          tags: ["Portfolios"],
+          parameters: [
+            { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+            { name: 'limit', in: 'query', schema: { type: 'integer', default: 20 } },
+          ],
+          responses: { '200': { description: '조회 성공' } }
+        },
+        post: {
+          summary: "내 포트폴리오 생성",
+          tags: ["Portfolios"],
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
                     name: { type: 'string' }
+                  }
                 }
-            }}}},
-            responses: { '201': { description: '생성 성공' }, '400': { description: '이미 존재함' } }
-          }
+              }
+            }
+          },
+          responses: { '201': { description: '생성 성공' }, '400': { description: '이미 존재함' } }
+        }
       },
       '/portfolios/mine': {
-          get: {
-            summary: "내 포트폴리오 조회",
-            tags: ["Portfolios"],
-            security: [{ bearerAuth: [] }],
-            responses: { '200': { description: '조회 성공' }, '404': { description: '포트폴리오 없음' } }
+        get: {
+          summary: "내 포트폴리오 조회",
+          tags: ["Portfolios"],
+          security: [{ bearerAuth: [] }],
+          responses: { '200': { description: '조회 성공' }, '404': { description: '포트폴리오 없음' } }
+        },
+        delete: {
+          summary: "내 포트폴리오 삭제",
+          tags: ["Portfolios"],
+          security: [{ bearerAuth: [] }],
+          responses: { '200': { description: '삭제 성공' }, '404': { description: '포트폴리오 없음' } }
+        }
+      },
+      '/portfolios/my': {
+        put: {
+          summary: "내 포트폴리오 생성 또는 전체 수정 (Upsert)",
+          tags: ["Portfolios"],
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            description: "포트폴리오 전체 데이터. 필드를 생략하면 해당 데이터가 삭제되거나 초기화될 수 있습니다.",
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    nickname: { type: 'string', example: '라이브 여신' },
+                    oneLineIntro: { type: 'string', example: '뷰티 전문 쇼호스트입니다.' },
+                    detailedIntro: { type: 'string', example: '상세 소개 내용입니다.' },
+                    experienceYears: { type: 'number', example: 5 },
+                    mainThumbnailUrl: { type: 'string', example: 'https://...' },
+                    tags: { type: 'array', items: { type: 'string' }, example: ['뷰티', '패션'] },
+                    status: { type: 'string', enum: ['published'], example: 'published' }
+                  }
+                }
+              }
+            }
           },
-          delete: {
-            summary: "내 포트폴리오 삭제",
-            tags: ["Portfolios"],
-            security: [{ bearerAuth: [] }],
-            responses: { '200': { description: '삭제 성공' }, '404': { description: '포트폴리오 없음' } }
+          responses: {
+            '200': { description: '성공적으로 저장됨' },
+            '401': { description: '인증 실패 (로그인 필요)' },
+            '403': { description: '권한 없음 (쇼호스트 계정이 아님)' }
           }
+        }
       },
       '/portfolios/{id}': {
-          put: {
-            summary: "내 포트폴리오 수정",
-            tags: ["Portfolios"],
-            security: [{ bearerAuth: [] }],
-            parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }}],
-            requestBody: { content: { 'application/json': { schema: { type: 'object' }}} },
-            responses: { '200': { description: '수정 성공' }, '403': { description: '권한 없음' } }
-          }
+        put: {
+          summary: "내 포트폴리오 수정",
+          tags: ["Portfolios"],
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
+          responses: { '200': { description: '수정 성공' }, '403': { description: '권한 없음' } }
+        }
       },
       // ===== Uploads =====
       '/uploads/signature': {
-          get: {
-              summary: "Cloudinary 업로드 서명 발급",
-              tags: ["Uploads"],
-              security: [{ bearerAuth: [] }],
-              responses: { '200': { description: '발급 성공' } }
-          }
+        get: {
+          summary: "Cloudinary 업로드 서명 발급",
+          tags: ["Uploads"],
+          security: [{ bearerAuth: [] }],
+          responses: { '200': { description: '발급 성공' } }
+        }
       },
       // ===== Scrape =====
       '/scrape': {
-          get: {
-              summary: "URL 정보 스크래핑",
-              tags: ["Scrape"],
-              parameters: [{ name: 'url', in: 'query', required: true, schema: { type: 'string' } }],
-              responses: { '200': { description: '성공' }, '500': { description: '실패' } }
-          }
+        get: {
+          summary: "URL 정보 스크래핑",
+          tags: ["Scrape"],
+          parameters: [{ name: 'url', in: 'query', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: '성공' }, '500': { description: '실패' } }
+        }
       }
     }
   },
