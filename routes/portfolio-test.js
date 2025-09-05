@@ -1,4 +1,3 @@
-// routes/portfolio-test.js
 'use strict';
 
 const router = require('express').Router();
@@ -19,19 +18,18 @@ const sanitize = (html='') => sanitizeHtml(html, {
   allowedSchemes: ['http','https','data','mailto','tel'],
 });
 
-// 구버전 → 저장 시 통일 입력으로 흡수
+// 저장 시 구버전 → 통일 입력으로 흡수
 function compatBody(b){
   const out = { ...b };
   if (out.name && !out.nickname) out.nickname = out.name;
   if (out.displayName && !out.nickname) out.nickname = out.displayName;
-
   if (out.mainThumbnail && !out.mainThumbnailUrl) out.mainThumbnailUrl = out.mainThumbnail;
   if (out.coverImage && !out.coverImageUrl) out.coverImageUrl = out.coverImage;
   if (out.subImages && !out.subThumbnails) out.subThumbnails = out.subImages;
   return out;
 }
 
-// DB → 응답 시 통일 출력으로 변환(가장 중요)
+// DB → 응답 시 통일 출력으로 변환
 function toClient(raw){
   if (!raw) return null;
   const d = raw.toObject ? raw.toObject() : raw;
@@ -46,7 +44,6 @@ function toClient(raw){
 
   const nickname = (d.nickname || d.displayName || d.name || '').trim() || '무명';
 
-  // headline 없으면 intro/oneLiner → 없으면 bio(텍스트만) 50자 요약
   const strip = (t) => String(t || '').replace(/<[^>]+>/g, '').trim();
   const headline =
       (d.headline || d.oneLiner || d.intro || '').trim()
@@ -85,7 +82,6 @@ function toClient(raw){
   };
 }
 
-// 정규화(저장 전)
 function normalizePayload(p){
   const out = { ...p };
 
@@ -133,11 +129,9 @@ function publishedGuard(req, res, next){
   next();
 }
 
-// 공통 스키마(빈 문자열은 undefined로)
 const baseSchema = [
   body('*').customSanitizer(v => (v === '' ? undefined : v)),
 
-  // name → nickname 흡수
   body('name').optional().custom((_, { req }) => {
     if (!req.body.nickname && typeof req.body.name === 'string') {
       req.body.nickname = req.body.name.trim();
