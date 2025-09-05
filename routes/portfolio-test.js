@@ -78,7 +78,6 @@ function publishedGuard(req, res, next){
 
 // ── 공통 검증 스키마 (draft에서 빈값 허용) ──
 const opt = { checkFalsy: true, nullable: true };
-
 const baseSchema = [
   body('status').optional().isIn(['draft','published']),
   body('visibility').optional().isIn(['public','unlisted','private']),
@@ -119,7 +118,9 @@ const baseSchema = [
 function sendValidationIfAny(req, res, next){
   const v = validationResult(req);
   if (v.isEmpty()) return next();
-  return res.status(422).json({ ok:false, message:'VALIDATION_FAILED', details: v.array() });
+  const details = v.array();
+  console.warn('[portfolio-test:validation]', JSON.stringify({ details, body: req.body }, null, 2));
+  return res.status(422).json({ ok:false, message:'VALIDATION_FAILED', details });
 }
 
 /* ───────── Routes ───────── */
@@ -135,13 +136,11 @@ router.post('/',
   async (req, res) => {
     try{
       const payload = normalizePayload(req.body || {});
-      payload.createdBy = req.user.id; // 서버에서만 설정
-
+      payload.createdBy = req.user.id;
       const created = await Portfolio.create(payload);
       return res.status(201).json({ data: created });
     }catch(err){
       console.error('[portfolio-test:create]', err);
-      // 과거 user_1 인덱스 충돌 안내
       if (err?.code === 11000 && String(err?.message||'').includes('user_1')) {
         return res.status(409).json({
           ok:false,
@@ -228,7 +227,6 @@ router.put('/:id',
         { new:true }
       );
       if (!updated) return res.status(403).json({ ok:false, message:'FORBIDDEN_EDIT' });
-
       return res.json({ data: updated });
     }catch(err){
       console.error('[portfolio-test:update]', err);
