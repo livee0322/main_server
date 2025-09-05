@@ -18,6 +18,7 @@ const sanitize = (html='') => sanitizeHtml(html, {
   allowedSchemes: ['http','https','data','mailto','tel'],
 });
 
+// 임의로 들어온 과거 키를 현재 스키마로 맞추기
 function compatBody(b){
   const out = { ...b };
   if (out.name && !out.nickname) out.nickname = out.name;
@@ -25,6 +26,12 @@ function compatBody(b){
   if (out.mainThumbnail && !out.mainThumbnailUrl) out.mainThumbnailUrl = out.mainThumbnail;
   if (out.coverImage && !out.coverImageUrl) out.coverImageUrl = out.coverImage;
   if (out.subImages && !out.subThumbnails) out.subThumbnails = out.subImages;
+  // 더 이상 서버에서 name 자체는 쓰지 않음
+  delete out.name;
+  delete out.displayName;
+  delete out.mainThumbnail;
+  delete out.coverImage;
+  delete out.subImages;
   return out;
 }
 
@@ -32,17 +39,13 @@ function toClient(raw){
   if (!raw) return null;
   const d = raw.toObject ? raw.toObject() : raw;
 
-  const sub = Array.isArray(d.subThumbnails) ? d.subThumbnails
-            : (Array.isArray(d.subImages) ? d.subImages : []);
-  const coverImageUrl = d.coverImageUrl || d.coverImage || '';
-  const mainThumbnailUrl = d.mainThumbnailUrl || d.mainThumbnail || sub[0] || coverImageUrl || '';
+  const sub = Array.isArray(d.subThumbnails) ? d.subThumbnails : [];
+  const coverImageUrl = d.coverImageUrl || '';
+  const mainThumbnailUrl =
+    d.mainThumbnailUrl || sub[0] || coverImageUrl || '';
 
-  const nickname = (d.nickname || d.displayName || d.name || '').trim() || '무명';
-  const strip = t => String(t || '').replace(/<[^>]+>/g,'').trim();
-  const headline = (d.headline || d.oneLiner || d.intro || '').trim()
-                || (d.bio ? strip(d.bio).slice(0,50) : '');
-
-  const tags = Array.isArray(d.tags) ? d.tags : (Array.isArray(d.skillTags)?d.skillTags:[]);
+  const nickname = (d.nickname || '').trim() || '무명';
+  const headline = (d.headline || '').trim();
 
   return {
     id: String(d._id || d.id || ''),
@@ -66,25 +69,29 @@ function toClient(raw){
 
     primaryLink: d.primaryLink || '',
     liveLinks: Array.isArray(d.liveLinks) ? d.liveLinks : [],
-    tags,
+    tags: Array.isArray(d.tags) ? d.tags : [],
     openToOffers: d.openToOffers !== false,
 
-    createdAt: d.createdAt, updatedAt: d.updatedAt, createdBy: d.createdBy,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+    createdBy: d.createdBy,
   };
 }
 
 function normalizePayload(p){
-  const out = { ...p };
+  const out = compatBody(p || {});
   if (out.bio) out.bio = sanitize(String(out.bio));
 
-  if (Array.isArray(out.tags)) out.tags = [...new Set(out.tags.map(t=>String(t).trim()).filter(Boolean))].slice(0,8);
-  if (Array.isArray(out.subThumbnails)) out.subThumbnails = out.subThumbnails.filter(Boolean).slice(0,5);
-  if (Array.isArray(out.liveLinks)) {
+  if (Array.isArray(out.tags))
+    out.tags = [...new Set(out.tags.map(t=>String(t).trim()).filter(Boolean))].slice(0,8);
+  if (Array.isArray(out.subThumbnails))
+    out.subThumbnails = out.subThumbnails.filter(Boolean).slice(0,5);
+  if (Array.isArray(out.liveLinks)){
     out.liveLinks = out.liveLinks.map(l=>({
       title: l?.title ? String(l.title).trim() : '',
       url:   l?.url   ? String(l.url).trim()   : '',
       date:  l?.date  ? new Date(l.date)       : undefined
-    })).filter(l => l.title || l.url);
+    })).filter(l=>l.title || l.url);
   }
 
   if (out.careerYears !== undefined) out.careerYears = Number(out.careerYears);
@@ -96,37 +103,35 @@ function normalizePayload(p){
   return out;
 }
 
-// 발행 시 필수: 닉네임, 한줄소개, 메인썸네일 (bio는 자유 형식)
+// 발행 시 필수 (bio는 자유 길이)
 function publishedGuard(req, res, next){
-  const p = req.body;
+  const p = req.body || {};
   if ((p.status || 'draft') !== 'published') return next();
 
   const errs = [];
-  if (!p.nickname || !String(p.nickname).trim()) errs.push({ param:'nickname', msg:'REQUIRED' });
-  if (!p.headline || !String(p.headline).trim()) errs.push({ param:'headline', msg:'REQUIRED' });
-  if (!p.mainThumbnailUrl || !String(p.mainThumbnailUrl).trim()) errs.push({ param:'mainThumbnailUrl', msg:'REQUIRED' });
+  if (!p.nickname || !String(p.nickname).trim())
+    errs.push({ param:'nickname', msg:'REQUIRED' });
+  if (!p.headline || !String(p.headline).trim())
+    errs.push({ param:'headline', msg:'REQUIRED' });
+  if (!p.mainThumbnailUrl || !String(p.mainThumbnailUrl).trim())
+    errs.push({ param:'mainThumbnailUrl', msg:'REQUIRED' });
 
-  if (errs.length) return res.status(422).json({ ok:false, code:'VALIDATION_FAILED', message:'유효성 오류', details: errs });
+  if (errs.length) return res.status(422).json({
+    ok:false, code:'VALIDATION_FAILED', message:'유효성 오류', details: errs
+  });
   next();
 }
 
+// 공통 스키마 (name 등 레거시는 검증 대상에서 제외)
 const baseSchema = [
   body('*').customSanitizer(v => (v === '' ? undefined : v)),
-
-  body('name').optional().custom((_, { req }) => {
-    if (!req.body.nickname && typeof req.body.name === 'string') {
-      req.body.nickname = req.body.name.trim();
-    }
-    delete req.body.name;
-    return true;
-  }),
 
   body('status').optional().isIn(['draft','published']),
   body('visibility').optional().isIn(['public','unlisted','private']),
 
   body('nickname').optional().isString().trim().isLength({ min:1, max:80 }),
   body('headline').optional().isString().trim().isLength({ min:1, max:120 }),
-  body('bio').optional().isString().isLength({ max:5000 }), // min 제거
+  body('bio').optional().isString().isLength({ max:5000 }),
 
   body('mainThumbnailUrl').optional().isURL({ protocols:['http','https'], require_protocol:true }),
   body('coverImageUrl').optional().isURL({ protocols:['http','https'], require_protocol:true }),
@@ -154,25 +159,28 @@ const baseSchema = [
 function sendValidationIfAny(req, res, next){
   const v = validationResult(req);
   if (v.isEmpty()) return next();
-  return res.status(422).json({ ok:false, code:'VALIDATION_FAILED', message:'유효성 오류', details: v.array({ onlyFirstError:true }) });
+  return res.status(422).json({
+    ok:false, code:'VALIDATION_FAILED', message:'유효성 오류',
+    details: v.array({ onlyFirstError:true })
+  });
 }
 
 // ── CRUD ───────────────────────────────────────────────────────────────────
 router.post('/',
   auth,
   requireRole('showhost','admin'),
-  (req,_res,next)=>{ req.body=compatBody(req.body); next(); },
+  (req,_res,next)=>{ req.body = normalizePayload(req.body); next(); },
   baseSchema,
   sendValidationIfAny,
   publishedGuard,
   async (req,res)=>{
     try{
-      const payload=normalizePayload(req.body||{});
-      payload.createdBy=req.user.id;
-      const created=await Portfolio.create(payload);
+      const payload = normalizePayload(req.body || {});
+      payload.createdBy = req.user.id;
+      const created = await Portfolio.create(payload);
       return res.status(201).json({ data: toClient(created) });
     }catch(err){
-      console.error('[portfolio-test:create]',err);
+      console.error('[portfolio-test:create]', err);
       return res.status(500).json({ ok:false, message: err.message || 'CREATE_FAILED' });
     }
   }
@@ -184,43 +192,45 @@ router.get('/',
   query('mine').optional().isIn(['1','true']),
   async (req,res)=>{
     try{
-      const page=Math.max(parseInt(req.query.page||'1',10),1);
-      const limit=Math.min(Math.max(parseInt(req.query.limit||'20',10),1),50);
+      const page  = Math.max(parseInt(req.query.page  || '1', 10), 1);
+      const limit = Math.min(Math.max(parseInt(req.query.limit || '20',10),1),50);
 
-      const q={ type:'portfolio' };
-      if(req.query.mine==='1'||req.query.mine==='true'){
-        if(!req.user) return res.status(401).json({ ok:false, message:'UNAUTHORIZED' });
-        q.createdBy=req.user.id;
+      const q = { type:'portfolio' };
+      if (req.query.mine==='1' || req.query.mine==='true'){
+        if (!req.user) return res.status(401).json({ ok:false, message:'UNAUTHORIZED' });
+        q.createdBy = req.user.id;
       }else{
         q.status='published';
-        q.visibility={ $in:['public','unlisted'] };
+        q.visibility = { $in:['public','unlisted'] };
       }
-      if(req.query.status) q.status=req.query.status;
+      if (req.query.status) q.status = req.query.status;
 
-      const sort={ createdAt:-1 };
-      const docs=await Portfolio.find(q).sort(sort).skip((page-1)*limit).limit(limit).lean();
-      const total=await Portfolio.countDocuments(q);
-
-      return res.json({ items: docs.map(toClient), page, limit, total, totalPages: Math.ceil(total/limit) });
+      const sort = { createdAt:-1 };
+      const docs = await Portfolio.find(q).sort(sort).skip((page-1)*limit).limit(limit).lean();
+      const total = await Portfolio.countDocuments(q);
+      return res.json({
+        items: docs.map(toClient), page, limit, total, totalPages: Math.ceil(total/limit)
+      });
     }catch(err){
-      console.error('[portfolio-test:list]',err);
+      console.error('[portfolio-test:list]', err);
       return res.status(500).json({ ok:false, message: err.message || 'LIST_FAILED' });
     }
   }
 );
 
 router.get('/:id', optionalAuth, async (req,res)=>{
-  const { id }=req.params;
-  if(!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
+  const { id } = req.params;
+  if (!mongoose.isValidObjectId(id))
+    return res.status(400).json({ ok:false, message:'INVALID_ID' });
   try{
-    const doc=await Portfolio.findById(id).lean();
-    if(!doc) return res.status(404).json({ ok:false, message:'NOT_FOUND' });
-    const isOwner=req.user && String(doc.createdBy)===req.user.id;
-    const isPublic=doc.status==='published' && ['public','unlisted'].includes(doc.visibility);
-    if(!isOwner && !isPublic) return res.status(403).json({ ok:false, message:'FORBIDDEN' });
+    const doc = await Portfolio.findById(id).lean();
+    if (!doc) return res.status(404).json({ ok:false, message:'NOT_FOUND' });
+    const isOwner = req.user && String(doc.createdBy) === req.user.id;
+    const isPublic = doc.status==='published' && ['public','unlisted'].includes(doc.visibility);
+    if (!isOwner && !isPublic) return res.status(403).json({ ok:false, message:'FORBIDDEN' });
     return res.json({ data: toClient(doc) });
   }catch(err){
-    console.error('[portfolio-test:read]',err);
+    console.error('[portfolio-test:read]', err);
     return res.status(500).json({ ok:false, message: err.message || 'READ_FAILED' });
   }
 });
@@ -228,20 +238,25 @@ router.get('/:id', optionalAuth, async (req,res)=>{
 router.put('/:id',
   auth,
   requireRole('showhost','admin'),
-  (req,_res,next)=>{ req.body=compatBody(req.body); next(); },
+  (req,_res,next)=>{ req.body = normalizePayload(req.body); next(); },
   baseSchema,
   sendValidationIfAny,
   publishedGuard,
   async (req,res)=>{
-    const { id }=req.params;
-    if(!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id))
+      return res.status(400).json({ ok:false, message:'INVALID_ID' });
     try{
-      const payload=normalizePayload(req.body||{});
-      const updated=await Portfolio.findOneAndUpdate({ _id:id, createdBy:req.user.id }, { $set: payload }, { new:true });
-      if(!updated) return res.status(403).json({ ok:false, message:'FORBIDDEN_EDIT' });
+      const payload = normalizePayload(req.body || {});
+      const updated = await Portfolio.findOneAndUpdate(
+        { _id:id, createdBy:req.user.id },
+        { $set: payload },
+        { new:true }
+      );
+      if (!updated) return res.status(403).json({ ok:false, message:'FORBIDDEN_EDIT' });
       return res.json({ data: toClient(updated) });
     }catch(err){
-      console.error('[portfolio-test:update]',err);
+      console.error('[portfolio-test:update]', err);
       return res.status(500).json({ ok:false, message: err.message || 'UPDATE_FAILED' });
     }
   }
@@ -251,14 +266,15 @@ router.delete('/:id',
   auth,
   requireRole('showhost','admin'),
   async (req,res)=>{
-    const { id }=req.params;
-    if(!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
+    const { id } = req.params;
+    if (!mongoose.isValidObjectId(id))
+      return res.status(400).json({ ok:false, message:'INVALID_ID' });
     try{
-      const removed=await Portfolio.findOneAndDelete({ _id:id, createdBy:req.user.id });
-      if(!removed) return res.status(404).json({ ok:false, message:'NOT_FOUND_OR_FORBIDDEN' });
+      const removed = await Portfolio.findOneAndDelete({ _id:id, createdBy:req.user.id });
+      if (!removed) return res.status(404).json({ ok:false, message:'NOT_FOUND_OR_FORBIDDEN' });
       return res.json({ message:'삭제 완료' });
     }catch(err){
-      console.error('[portfolio-test:delete]',err);
+      console.error('[portfolio-test:delete]', err);
       return res.status(500).json({ ok:false, message: err.message || 'DELETE_FAILED' });
     }
   }
