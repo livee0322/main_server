@@ -1,3 +1,4 @@
+// routes/portfolio-test.js
 'use strict';
 
 const router = require('express').Router();
@@ -7,8 +8,7 @@ const mongoose = require('mongoose');
 
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
-// 테스트 모델 사용
-const Portfolio = require('../models/Portfolio-test');
+const Portfolio = require('../models/Portfolio-test'); // ✅ 테스트 모델
 
 // ── helpers ────────────────────────────────────────────────────────────────
 const optionalAuth = auth.optional ? auth.optional() : (_req,_res,next)=>next();
@@ -19,10 +19,10 @@ const sanitize = (html='') => sanitizeHtml(html, {
   allowedSchemes: ['http','https','data','mailto','tel'],
 });
 
-// 구버전 필드명을 캐논 필드로 매핑
+// 구버전 → 통일 필드 맵
 function compatBody(b){
   const out = { ...b };
-  if (out.name && !out.nickname) out.nickname = out.name;           // ✅ name -> nickname
+  if (out.name && !out.nickname) out.nickname = out.name;       // name 호환
   if (out.displayName && !out.nickname) out.nickname = out.displayName;
   if (out.mainThumbnail && !out.mainThumbnailUrl) out.mainThumbnailUrl = out.mainThumbnail;
   if (out.coverImage && !out.coverImageUrl) out.coverImageUrl = out.coverImage;
@@ -30,7 +30,7 @@ function compatBody(b){
   return out;
 }
 
-// 정규화(길이/중복/타입 보정)
+// 정규화
 function normalizePayload(p){
   const out = { ...p };
 
@@ -62,7 +62,7 @@ function normalizePayload(p){
   return out;
 }
 
-// 상태가 published일 때 필수/추가 검증
+// 발행 시 필수 4종
 function publishedGuard(req, res, next){
   const p = req.body;
   const status = p.status || 'draft';
@@ -78,13 +78,11 @@ function publishedGuard(req, res, next){
   next();
 }
 
-// 공통 스키마(드래프트/발행 공통 규칙)
-// ※ name 은 들어오면 nickname 으로 옮기고 검증 스킵
+// 공통 스키마(빈 문자열은 undefined로)
 const baseSchema = [
-  // 빈 문자열은 undefined 로 치환
   body('*').customSanitizer(v => (v === '' ? undefined : v)),
 
-  // 과거 name 을 nickname 으로 흡수
+  // name → nickname 흡수
   body('name').optional().custom((_, { req }) => {
     if (!req.body.nickname && typeof req.body.name === 'string') {
       req.body.nickname = req.body.name.trim();
@@ -123,14 +121,13 @@ const baseSchema = [
   body('primaryLink').optional().isURL({ protocols:['http','https'], require_protocol:true }),
 ];
 
-// 표준 에러 응답
 function sendValidationIfAny(req, res, next){
   const v = validationResult(req);
   if (v.isEmpty()) return next();
   return res.status(422).json({ ok:false, code:'VALIDATION_FAILED', message:'유효성 오류', details: v.array({ onlyFirstError:true }) });
 }
 
-// ── Routes ────────────────────────────────────────────────────────────────
+// ── CRUD ───────────────────────────────────────────────────────────────────
 
 // Create
 router.post('/',
@@ -154,7 +151,7 @@ router.post('/',
   }
 );
 
-// List (mine=1 이면 본인 것, 아니면 공개물만)
+// List
 router.get('/',
   optionalAuth,
   query('status').optional().isIn(['draft','published']),
@@ -222,14 +219,12 @@ router.put('/:id',
 
     try{
       const payload = normalizePayload(req.body || {});
-
       const updated = await Portfolio.findOneAndUpdate(
         { _id:id, createdBy: req.user.id },
         { $set: payload },
         { new:true }
       );
       if (!updated) return res.status(403).json({ ok:false, message:'FORBIDDEN_EDIT' });
-
       return res.json({ data: updated });
     }catch(err){
       console.error('[portfolio-test:update]', err);
