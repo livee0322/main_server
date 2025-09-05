@@ -19,18 +19,73 @@ const sanitize = (html='') => sanitizeHtml(html, {
   allowedSchemes: ['http','https','data','mailto','tel'],
 });
 
-// 구버전 → 통일 필드 맵
+// 구버전 → 저장 시 통일 입력으로 흡수
 function compatBody(b){
   const out = { ...b };
-  if (out.name && !out.nickname) out.nickname = out.name;       // name 호환
+  if (out.name && !out.nickname) out.nickname = out.name;
   if (out.displayName && !out.nickname) out.nickname = out.displayName;
+
   if (out.mainThumbnail && !out.mainThumbnailUrl) out.mainThumbnailUrl = out.mainThumbnail;
   if (out.coverImage && !out.coverImageUrl) out.coverImageUrl = out.coverImage;
   if (out.subImages && !out.subThumbnails) out.subThumbnails = out.subImages;
   return out;
 }
 
-// 정규화
+// DB → 응답 시 통일 출력으로 변환(가장 중요)
+function toClient(raw){
+  if (!raw) return null;
+  const d = raw.toObject ? raw.toObject() : raw;
+
+  const sub = Array.isArray(d.subThumbnails)
+    ? d.subThumbnails
+    : (Array.isArray(d.subImages) ? d.subImages : []);
+
+  const coverImageUrl = d.coverImageUrl || d.coverImage || '';
+  const mainThumbnailUrl =
+      d.mainThumbnailUrl || d.mainThumbnail || sub[0] || coverImageUrl || '';
+
+  const nickname = (d.nickname || d.displayName || d.name || '').trim() || '무명';
+
+  // headline 없으면 intro/oneLiner → 없으면 bio(텍스트만) 50자 요약
+  const strip = (t) => String(t || '').replace(/<[^>]+>/g, '').trim();
+  const headline =
+      (d.headline || d.oneLiner || d.intro || '').trim()
+      || (d.bio ? strip(d.bio).slice(0, 50) : '');
+
+  const tags = Array.isArray(d.tags) ? d.tags : (Array.isArray(d.skillTags) ? d.skillTags : []);
+
+  return {
+    id: String(d._id || d.id || ''),
+    type: 'portfolio',
+    status: d.status || 'draft',
+    visibility: d.visibility || 'public',
+
+    nickname,
+    headline,
+    bio: d.bio || '',
+
+    mainThumbnailUrl,
+    coverImageUrl,
+    subThumbnails: sub,
+
+    realName: d.realName || '',
+    realNamePublic: !!d.realNamePublic,
+    careerYears: (d.careerYears ?? undefined),
+    age: (d.age ?? undefined),
+    agePublic: !!d.agePublic,
+
+    primaryLink: d.primaryLink || '',
+    liveLinks: Array.isArray(d.liveLinks) ? d.liveLinks : [],
+    tags,
+    openToOffers: d.openToOffers !== false,
+
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+    createdBy: d.createdBy,
+  };
+}
+
+// 정규화(저장 전)
 function normalizePayload(p){
   const out = { ...p };
 
@@ -143,7 +198,7 @@ router.post('/',
       payload.createdBy = req.user.id;
 
       const created = await Portfolio.create(payload);
-      return res.status(201).json({ data: created });
+      return res.status(201).json({ data: toClient(created) });
     }catch(err){
       console.error('[portfolio-test:create]', err);
       return res.status(500).json({ ok:false, message: err.message || 'CREATE_FAILED' });
@@ -172,11 +227,11 @@ router.get('/',
       if (req.query.status) q.status = req.query.status;
 
       const sort = { createdAt: -1 };
-      const [items, total] = await Promise.all([
-        Portfolio.find(q).sort(sort).skip((page-1)*limit).limit(limit),
-        Portfolio.countDocuments(q),
-      ]);
+      const docs  = await Portfolio.find(q).sort(sort)
+                       .skip((page-1)*limit).limit(limit).lean();
+      const total = await Portfolio.countDocuments(q);
 
+      const items = docs.map(toClient);
       return res.json({ items, page, limit, total, totalPages: Math.ceil(total/limit) });
     }catch(err){
       console.error('[portfolio-test:list]', err);
@@ -191,14 +246,14 @@ router.get('/:id', optionalAuth, async (req, res) => {
   if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
 
   try{
-    const doc = await Portfolio.findById(id);
+    const doc = await Portfolio.findById(id).lean();
     if (!doc) return res.status(404).json({ ok:false, message:'NOT_FOUND' });
 
     const isOwner = req.user && String(doc.createdBy) === req.user.id;
     const isPublic = doc.status === 'published' && ['public','unlisted'].includes(doc.visibility);
     if (!isOwner && !isPublic) return res.status(403).json({ ok:false, message:'FORBIDDEN' });
 
-    return res.json({ data: doc });
+    return res.json({ data: toClient(doc) });
   }catch(err){
     console.error('[portfolio-test:read]', err);
     return res.status(500).json({ ok:false, message: err.message || 'READ_FAILED' });
@@ -225,7 +280,7 @@ router.put('/:id',
         { new:true }
       );
       if (!updated) return res.status(403).json({ ok:false, message:'FORBIDDEN_EDIT' });
-      return res.json({ data: updated });
+      return res.json({ data: toClient(updated) });
     }catch(err){
       console.error('[portfolio-test:update]', err);
       return res.status(500).json({ ok:false, message: err.message || 'UPDATE_FAILED' });
