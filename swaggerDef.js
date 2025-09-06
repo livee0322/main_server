@@ -74,6 +74,7 @@ const options = {
                   properties: {
                     email: { type: 'string', example: 'brand@example.com' },
                     password: { type: 'string', example: 'password123' },
+                    role: { type: 'string', enum: ['brand', 'showhost'], example: 'brand' }
                   }
                 }
               }
