@@ -68,8 +68,7 @@ app.use('/api/portfolio', require('./routes/portfolio'));
 
 // 태웅이 테스트 
 app.use(`${BASE_PATH}/recruit-test`, require('./routes/recruit-test'));
-
-// ⛑️ 모델 중복 방지: 'portfolio-test'는 통합 포트폴리오 라우터에 alias로 매핑
+app.use('/api/v1/news-test', require('./routes/news-test'));
 const portfolioUnified = require('./routes/portfolio');
 app.use('/api/v1/portfolio-test', portfolioUnified);
 
