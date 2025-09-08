@@ -10,15 +10,15 @@ const Portfolio = require('../models/Portfolio-test');
 
 const optionalAuth = auth.optional ? auth.optional() : (_req,_res,next)=>next();
 
+// ── utils ──────────────────────────────────────────────────────────
 const sanitize = (html='') => sanitizeHtml(html, {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img','h1','h2','u','span','figure','figcaption']),
   allowedAttributes: { '*': ['style','class','id','src','href','alt','title'] },
   allowedSchemes: ['http','https','data','mailto','tel'],
 });
-
 const strip = (html='') => String(html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 
-// 빈문자열 제거 + 구버전 → 통일 본문 맵핑
+// 요청 본문: 빈문자열 제거 + 구버전 → 통일 키 매핑
 function compatBody(b){
   const out = {};
   for (const k of Object.keys(b||{})) out[k] = (b[k] === '' ? undefined : b[k]);
@@ -30,14 +30,13 @@ function compatBody(b){
   return out;
 }
 
-// 문서 → 통일 응답(홈 스크립트가 기대하는 형태)
+// DB 문서 → 클라이언트 통일 응답(홈/리스트/수정 모두 같은 필드)
 function unifyDoc(d){
   const o = (typeof d.toObject === 'function') ? d.toObject() : { ...d };
   o.id = String(o._id || o.id || '');
-
   o.nickname = o.nickname || o.displayName || o.name || '';
 
-  // 🔸 headline 폴백: intro/introduction/oneLiner/summary → bio 스니펫(최대 60자)
+  // headline 폴백: intro/introduction/oneLiner/summary → bio 스니펫(60자)
   o.headline =
     o.headline ||
     o.intro || o.introduction || o.oneLiner || o.summary ||
@@ -49,11 +48,10 @@ function unifyDoc(d){
   o.subThumbnails    = (Array.isArray(o.subThumbnails) && o.subThumbnails.length)
                         ? o.subThumbnails
                         : (Array.isArray(o.subImages) ? o.subImages : []);
-
   return o;
 }
 
-// 저장 전 정규화
+// 저장 전 정규화(형식 보정만; 기본값 주입은 POST에서만)
 function normalizePayload(p){
   const out = { ...p };
   if (out.bio) out.bio = sanitize(String(out.bio));
@@ -68,15 +66,13 @@ function normalizePayload(p){
   }
   if (out.careerYears !== undefined) out.careerYears = Number(out.careerYears);
   if (out.age         !== undefined) out.age         = Number(out.age);
-  out.type = 'portfolio';
-  out.visibility = out.visibility || 'public';
-  out.status = out.status || 'draft';
+  // ❌ 여기서 status/visibility 기본값을 넣지 않는다(POST에서만)
   return out;
 }
 
-// 발행 guard (bio 길이 제한 없음)
+// 발행 검증(필수값) — bio 제한 없음
 function publishedGuard(req, res, next){
-  const p = req.body;
+  const p = req.body || {};
   if ((p.status || 'draft') !== 'published') return next();
   const errs = [];
   if (!p.nickname)         errs.push({ param:'nickname',         msg:'REQUIRED' });
@@ -86,6 +82,7 @@ function publishedGuard(req, res, next){
   next();
 }
 
+// 공통 스키마(유효성)
 const baseSchema = [
   body('*').customSanitizer(v => (v === '' ? undefined : v)),
   body('name').optional().custom((_, { req }) => { if (!req.body.nickname && typeof req.body.name === 'string') req.body.nickname = req.body.name.trim(); delete req.body.name; return true; }),
@@ -119,8 +116,9 @@ function sendValidationIfAny(req, res, next){
   return res.status(422).json({ ok:false, code:'VALIDATION_FAILED', message:'유효성 오류', details: v.array({ onlyFirstError:true }) });
 }
 
-/* ── CRUD ─────────────────────────────────────────── */
+// ── CRUD ───────────────────────────────────────────────────────────
 
+// Create
 router.post('/',
   auth, requireRole('showhost','admin'),
   (req,_res,next)=>{ req.body = compatBody(req.body); next(); },
@@ -128,6 +126,11 @@ router.post('/',
   async (req,res)=>{
     try{
       const payload = normalizePayload(req.body || {});
+      // ✅ 기본값은 생성 시에만
+      payload.type = 'portfolio';
+      if (payload.status === undefined)     payload.status = 'draft';
+      if (payload.visibility === undefined) payload.visibility = 'public';
+
       payload.createdBy = req.user.id;
       const created = await Portfolio.create(payload);
       return res.status(201).json({ data: unifyDoc(created) });
@@ -138,6 +141,7 @@ router.post('/',
   }
 );
 
+// List
 router.get('/',
   optionalAuth,
   query('status').optional().isIn(['draft','published']),
@@ -172,6 +176,7 @@ router.get('/',
   }
 );
 
+// Read
 router.get('/:id', optionalAuth, async (req,res)=>{
   const { id } = req.params;
   if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
@@ -188,6 +193,7 @@ router.get('/:id', optionalAuth, async (req,res)=>{
   }
 });
 
+// Update
 router.put('/:id',
   auth, requireRole('showhost','admin'),
   (req,_res,next)=>{ req.body = compatBody(req.body); next(); },
@@ -197,6 +203,8 @@ router.put('/:id',
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
     try{
       const payload = normalizePayload(req.body || {});
+      // ❗여기서는 status/visibility 기본값 주입 금지(넘어온 값만 변경)
+      payload.type = 'portfolio'; // 무해한 보정(선택)
       const updated = await Portfolio.findOneAndUpdate(
         { _id:id, createdBy: req.user.id },
         { $set: payload },
@@ -211,6 +219,7 @@ router.put('/:id',
   }
 );
 
+// Delete
 router.delete('/:id',
   auth, requireRole('showhost','admin'),
   async (req,res)=>{
