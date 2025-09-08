@@ -10,13 +10,14 @@ const Portfolio = require('../models/Portfolio-test');
 
 const optionalAuth = auth.optional ? auth.optional() : (_req,_res,next)=>next();
 
+// sanitize
 const sanitize = (html='') => sanitizeHtml(html, {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img','h1','h2','u','span','figure','figcaption']),
   allowedAttributes: { '*': ['style','class','id','src','href','alt','title'] },
   allowedSchemes: ['http','https','data','mailto','tel'],
 });
 
-// 빈값 제거 + 구버전 → 통일 본문 맵핑
+// 빈값 제거 + 구버전 → 통일 본문 맵
 function compatBody(b){
   const out = {};
   for (const k of Object.keys(b||{})) out[k] = (b[k] === '' ? undefined : b[k]);
@@ -29,21 +30,26 @@ function compatBody(b){
   return out;
 }
 
+// bio에서 텍스트만 추출
 const strip = (html='') => String(html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 
-// 문서 → 통일 응답
+// 문서 → 통일 응답(읽기/목록 공통)
 function unifyDoc(d){
   const o = (typeof d.toObject === 'function') ? d.toObject() : { ...d };
   o.id = String(o._id || o.id || '');
   o.nickname = o.nickname || o.displayName || o.name || '';
 
-  // headline 레거시 폴백 + bio 스니펫
+  // ★ headline 보강(레거시 필드 + bio 스니펫)
   o.headline =
-    o.headline ||
-    o.intro || o.introduction || o.oneLiner || o.summary ||
+    (o.headline && String(o.headline).trim()) ||
+    (o.intro && String(o.intro).trim()) ||
+    (o.introduction && String(o.introduction).trim()) ||
+    (o.oneLiner && String(o.oneLiner).trim()) ||
+    (o.summary && String(o.summary).trim()) ||
     (o.bio ? strip(o.bio).slice(0,60) : '') ||
     '';
 
+  // 이미지 폴백
   o.mainThumbnailUrl = o.mainThumbnailUrl || o.mainThumbnail || '';
   o.coverImageUrl    = o.coverImageUrl    || o.coverImage    || '';
   o.subThumbnails    = (Array.isArray(o.subThumbnails) && o.subThumbnails.length)
