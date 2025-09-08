@@ -10,18 +10,18 @@ const Portfolio = require('../models/Portfolio-test');
 
 const optionalAuth = auth.optional ? auth.optional() : (_req,_res,next)=>next();
 
-// sanitize
 const sanitize = (html='') => sanitizeHtml(html, {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img','h1','h2','u','span','figure','figcaption']),
   allowedAttributes: { '*': ['style','class','id','src','href','alt','title'] },
   allowedSchemes: ['http','https','data','mailto','tel'],
 });
 
-// 빈값 제거 + 구버전 → 통일 본문 맵
+const strip = (html='') => String(html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+
+// 빈문자열 제거 + 구버전 → 통일 본문 맵핑
 function compatBody(b){
   const out = {};
   for (const k of Object.keys(b||{})) out[k] = (b[k] === '' ? undefined : b[k]);
-
   if (out.name && !out.nickname) out.nickname = out.name;
   if (out.displayName && !out.nickname) out.nickname = out.displayName;
   if (out.mainThumbnail && !out.mainThumbnailUrl) out.mainThumbnailUrl = out.mainThumbnail;
@@ -30,35 +30,30 @@ function compatBody(b){
   return out;
 }
 
-// bio에서 텍스트만 추출
-const strip = (html='') => String(html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
-
-// 문서 → 통일 응답(읽기/목록 공통)
+// 문서 → 통일 응답(홈 스크립트가 기대하는 형태)
 function unifyDoc(d){
   const o = (typeof d.toObject === 'function') ? d.toObject() : { ...d };
   o.id = String(o._id || o.id || '');
+
   o.nickname = o.nickname || o.displayName || o.name || '';
 
-  // ★ headline 보강(레거시 필드 + bio 스니펫)
+  // 🔸 headline 폴백: intro/introduction/oneLiner/summary → bio 스니펫(최대 60자)
   o.headline =
-    (o.headline && String(o.headline).trim()) ||
-    (o.intro && String(o.intro).trim()) ||
-    (o.introduction && String(o.introduction).trim()) ||
-    (o.oneLiner && String(o.oneLiner).trim()) ||
-    (o.summary && String(o.summary).trim()) ||
+    o.headline ||
+    o.intro || o.introduction || o.oneLiner || o.summary ||
     (o.bio ? strip(o.bio).slice(0,60) : '') ||
     '';
 
-  // 이미지 폴백
   o.mainThumbnailUrl = o.mainThumbnailUrl || o.mainThumbnail || '';
   o.coverImageUrl    = o.coverImageUrl    || o.coverImage    || '';
   o.subThumbnails    = (Array.isArray(o.subThumbnails) && o.subThumbnails.length)
                         ? o.subThumbnails
                         : (Array.isArray(o.subImages) ? o.subImages : []);
+
   return o;
 }
 
-// 정규화(저장 전)
+// 저장 전 정규화
 function normalizePayload(p){
   const out = { ...p };
   if (out.bio) out.bio = sanitize(String(out.bio));
@@ -79,7 +74,7 @@ function normalizePayload(p){
   return out;
 }
 
-// 발행 시 필수 (bio 제한 없음)
+// 발행 guard (bio 길이 제한 없음)
 function publishedGuard(req, res, next){
   const p = req.body;
   if ((p.status || 'draft') !== 'published') return next();
@@ -127,12 +122,9 @@ function sendValidationIfAny(req, res, next){
 /* ── CRUD ─────────────────────────────────────────── */
 
 router.post('/',
-  auth,
-  requireRole('showhost','admin'),
+  auth, requireRole('showhost','admin'),
   (req,_res,next)=>{ req.body = compatBody(req.body); next(); },
-  baseSchema,
-  sendValidationIfAny,
-  publishedGuard,
+  baseSchema, sendValidationIfAny, publishedGuard,
   async (req,res)=>{
     try{
       const payload = normalizePayload(req.body || {});
@@ -197,12 +189,9 @@ router.get('/:id', optionalAuth, async (req,res)=>{
 });
 
 router.put('/:id',
-  auth,
-  requireRole('showhost','admin'),
+  auth, requireRole('showhost','admin'),
   (req,_res,next)=>{ req.body = compatBody(req.body); next(); },
-  baseSchema,
-  sendValidationIfAny,
-  publishedGuard,
+  baseSchema, sendValidationIfAny, publishedGuard,
   async (req,res)=>{
     const { id } = req.params;
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
@@ -223,8 +212,7 @@ router.put('/:id',
 );
 
 router.delete('/:id',
-  auth,
-  requireRole('showhost','admin'),
+  auth, requireRole('showhost','admin'),
   async (req,res)=>{
     const { id } = req.params;
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
