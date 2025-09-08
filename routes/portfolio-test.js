@@ -8,7 +8,6 @@ const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
 const Portfolio = require('../models/Portfolio-test');
 
-// ── helpers ─────────────────────────────────────────────────────────
 const optionalAuth = auth.optional ? auth.optional() : (_req,_res,next)=>next();
 
 const sanitize = (html='') => sanitizeHtml(html, {
@@ -17,9 +16,11 @@ const sanitize = (html='') => sanitizeHtml(html, {
   allowedSchemes: ['http','https','data','mailto','tel'],
 });
 
-// 구버전 → 통일 필드 맵 (요청 본문용)
+// 빈값 제거 + 구버전 → 통일 본문 맵핑
 function compatBody(b){
-  const out = { ...b };
+  const out = {};
+  for (const k of Object.keys(b||{})) out[k] = (b[k] === '' ? undefined : b[k]);
+
   if (out.name && !out.nickname) out.nickname = out.name;
   if (out.displayName && !out.nickname) out.nickname = out.displayName;
   if (out.mainThumbnail && !out.mainThumbnailUrl) out.mainThumbnailUrl = out.mainThumbnail;
@@ -28,12 +29,21 @@ function compatBody(b){
   return out;
 }
 
-// 문서 → 통일 응답(읽기/목록 공통)
+const strip = (html='') => String(html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
+
+// 문서 → 통일 응답
 function unifyDoc(d){
   const o = (typeof d.toObject === 'function') ? d.toObject() : { ...d };
   o.id = String(o._id || o.id || '');
   o.nickname = o.nickname || o.displayName || o.name || '';
-  o.headline = o.headline || '';
+
+  // headline 레거시 폴백 + bio 스니펫
+  o.headline =
+    o.headline ||
+    o.intro || o.introduction || o.oneLiner || o.summary ||
+    (o.bio ? strip(o.bio).slice(0,60) : '') ||
+    '';
+
   o.mainThumbnailUrl = o.mainThumbnailUrl || o.mainThumbnail || '';
   o.coverImageUrl    = o.coverImageUrl    || o.coverImage    || '';
   o.subThumbnails    = (Array.isArray(o.subThumbnails) && o.subThumbnails.length)
@@ -63,7 +73,7 @@ function normalizePayload(p){
   return out;
 }
 
-// 발행 시 필수 (bio 길이 제한 제거)
+// 발행 시 필수 (bio 제한 없음)
 function publishedGuard(req, res, next){
   const p = req.body;
   if ((p.status || 'draft') !== 'published') return next();
@@ -75,21 +85,14 @@ function publishedGuard(req, res, next){
   next();
 }
 
-// 공통 스키마
 const baseSchema = [
   body('*').customSanitizer(v => (v === '' ? undefined : v)),
-  body('name').optional().custom((_, { req }) => {  // name 전달돼도 안전
-    if (!req.body.nickname && typeof req.body.name === 'string') {
-      req.body.nickname = req.body.name.trim();
-    }
-    delete req.body.name;
-    return true;
-  }),
+  body('name').optional().custom((_, { req }) => { if (!req.body.nickname && typeof req.body.name === 'string') req.body.nickname = req.body.name.trim(); delete req.body.name; return true; }),
   body('status').optional().isIn(['draft','published']),
   body('visibility').optional().isIn(['public','unlisted','private']),
   body('nickname').optional().isString().trim().isLength({ min:1, max:80 }),
   body('headline').optional().isString().trim().isLength({ min:1, max:120 }),
-  body('bio').optional().isString().isLength({ max:5000 }), // 자유 길이
+  body('bio').optional().isString().isLength({ max:5000 }),
   body('mainThumbnailUrl').optional().isURL({ protocols:['http','https'], require_protocol:true }),
   body('coverImageUrl').optional().isURL({ protocols:['http','https'], require_protocol:true }),
   body('subThumbnails').optional().isArray({ max:5 }),
@@ -115,9 +118,8 @@ function sendValidationIfAny(req, res, next){
   return res.status(422).json({ ok:false, code:'VALIDATION_FAILED', message:'유효성 오류', details: v.array({ onlyFirstError:true }) });
 }
 
-// ── CRUD ────────────────────────────────────────────────────────────
+/* ── CRUD ─────────────────────────────────────────── */
 
-// Create
 router.post('/',
   auth,
   requireRole('showhost','admin'),
@@ -138,7 +140,6 @@ router.post('/',
   }
 );
 
-// List (응답을 통일 필드로 변환)
 router.get('/',
   optionalAuth,
   query('status').optional().isIn(['draft','published']),
@@ -173,7 +174,6 @@ router.get('/',
   }
 );
 
-// Read (통일 필드로 반환)
 router.get('/:id', optionalAuth, async (req,res)=>{
   const { id } = req.params;
   if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
@@ -190,7 +190,6 @@ router.get('/:id', optionalAuth, async (req,res)=>{
   }
 });
 
-// Update
 router.put('/:id',
   auth,
   requireRole('showhost','admin'),
@@ -217,7 +216,6 @@ router.put('/:id',
   }
 );
 
-// Delete
 router.delete('/:id',
   auth,
   requireRole('showhost','admin'),
