@@ -14,7 +14,7 @@ const PortfolioSchema = new Schema({
   coverImageUrl:    { type: String, trim: true },
   subThumbnails:    [{ type: String, trim: true }],
 
-  // 호환(읽기 전용 느낌) — 예전 문서가 가진 필드
+  // 호환(읽기 전용 느낌)
   mainThumbnail: { type: String, trim: true },
   coverImage:    { type: String, trim: true },
   subImages:     [{ type: String, trim: true }],
@@ -38,7 +38,7 @@ const PortfolioSchema = new Schema({
 
   tags: [{ type: String, trim: true }],
 
-  createdBy: { type: Schema.Types.ObjectId, ref: 'User' } // ⚠️ unique 절대 금지
+  createdBy: { type: Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps:true });
 
 module.exports = model('PortfolioTest', PortfolioSchema);
