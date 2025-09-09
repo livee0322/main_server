@@ -100,7 +100,13 @@ router.get(
 
         const q = {}
         if (req.query.type) q.type = req.query.type
-        if (req.query.status) q.status = req.query.status
+
+        if (req.query.status) {
+            q.status = req.query.status
+        } else {
+            q.status = "published"
+        }
+
         if (req.query.q)
             q.title = { $regex: String(req.query.q), $options: "i" }
 
