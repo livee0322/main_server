@@ -6,20 +6,16 @@ const mongoose = require('mongoose');
 const path = require('path');
 const fs = require('fs');
 
-// --- 공용 미들웨어
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
 
-// --- 모델 로딩 헬퍼 (/src/models/* 또는 /models/* 모두 지원)
+// 모델 로더(루트/models, src/models 둘 다 지원)
 function useModel(name) {
   const cand = [
-    path.resolve(__dirname, '../models', name + '.js'),   // /src/models
-    path.resolve(__dirname, '../../models', name + '.js') // /models
+    path.resolve(__dirname, '../models', name + '.js'),
+    path.resolve(__dirname, '../../models', name + '.js'),
   ];
-  for (const p of cand) {
-    if (fs.existsSync(p)) return require(p);
-  }
-  // 마지막 안전장치(확장자 없이 시도)
+  for (const p of cand) { if (fs.existsSync(p)) return require(p); }
   try { return require('../models/' + name); } catch {}
   return require('../../models/' + name);
 }
@@ -28,7 +24,6 @@ const Application = useModel('Application-test');
 const Recruit    = useModel('Recruit-test');
 const Portfolio  = useModel('Portfolio-test');
 
-// 연락처/외부 유도 금지
 const badContact = /(email|e-?mail|@|카톡|카카오|kakao|톡|전화|폰|phone|tel|연락|이메일|메일|insta|instagram|dm|디엠)/i;
 
 const isId  = v => typeof v === 'string' && mongoose.isValidObjectId(v);
@@ -37,14 +32,13 @@ const ok    = (res, data) => res.json({ ok: true, data });
 const fail  = (res, code='ERROR', status=400, message) =>
   res.status(status).json({ ok:false, code, message });
 
-// 입력 검증 에러 공통 처리
 const sendValidation = (req,res,next) => {
   const v = validationResult(req);
   if (v.isEmpty()) return next();
   return res.status(422).json({ ok:false, code:'VALIDATION_FAILED', details: v.array({ onlyFirstError:true }) });
 };
 
-// 브랜드/관리자: 내가 만든 공고인지 확인
+// 내가 만든 공고인지(브랜드/관리자)
 async function assertOwnRecruit(req, res, next) {
   try {
     const r = await Recruit.findById(req.recruitId || req.query.recruitId).lean();
@@ -59,13 +53,14 @@ async function assertOwnRecruit(req, res, next) {
   }
 }
 
-/* -----------------------------
- * POST /  (쇼호스트 전용) — 지원 생성
- * ---------------------------*/
+/* ---------------------------------------
+ * POST /  (호스트 전용) — 지원 생성
+ * -------------------------------------*/
 router.post(
   '/',
   auth,
-  requireRole('showhost','admin'),
+  // ★ host 도 허용 (기존: 'showhost','admin')
+  requireRole('host','showhost','admin'),
   [
     body('recruitId').custom(isId),
     body('portfolioId').custom(isId),
@@ -76,7 +71,7 @@ router.post(
     try {
       const { recruitId, portfolioId, message = '' } = req.body;
 
-      // 포트폴리오 소유자 검증
+      // 포트폴리오 소유자 확인
       const pf = await Portfolio.findById(portfolioId).lean();
       if (!pf) return fail(res, 'PORTFOLIO_NOT_FOUND', 404);
       const owner = pf.userId || pf.ownerId || pf.createdBy;
@@ -86,7 +81,6 @@ router.post(
       const r = await Recruit.findById(recruitId).lean();
       if (!r) return fail(res, 'RECRUIT_NOT_FOUND', 404);
 
-      // 생성(중복은 unique index가 막음)
       const created = await Application.create({
         recruitId,
         portfolioId,
@@ -94,7 +88,6 @@ router.post(
         createdBy: req.user.id,
         status: 'pending',
       });
-
       return res.status(201).json({ ok:true, data:{ id: created.id } });
     } catch (err) {
       if (err?.code === 11000) return fail(res, 'ALREADY_APPLIED', 409, '이미 지원한 공고입니다.');
@@ -104,12 +97,34 @@ router.post(
   }
 );
 
-/* -----------------------------
- * GET / — 목록
- *  - 브랜드: ?recruitId=... (필수) → 해당 공고의 지원자
- *  - 쇼호스트: ?mine=1 → 내가 지원한 목록
- *  - 공통: ?limit=&skip=
- * ---------------------------*/
+/* ---------------------------------------
+ * GET /count?recruitId=... — 지원자 수(브랜드)
+ *  ※ 목록보다 가볍게 숫자만 필요할 때 사용
+ * -------------------------------------*/
+router.get(
+  '/count',
+  auth,
+  [ query('recruitId').custom(isId) ],
+  sendValidation,
+  async (req, res) => {
+    try {
+      req.recruitId = req.query.recruitId;
+      return assertOwnRecruit(req, res, async () => {
+        const total = await Application.countDocuments({ recruitId: req.query.recruitId });
+        return ok(res, { total });
+      });
+    } catch (err) {
+      console.error('[applications-test:count]', err);
+      return fail(res, 'COUNT_FAILED', 500, err.message);
+    }
+  }
+);
+
+/* ---------------------------------------
+ * GET /  — 목록
+ *  - 브랜드: ?recruitId=... (필수)
+ *  - 호스트 : ?mine=1
+ * -------------------------------------*/
 router.get(
   '/',
   auth,
@@ -125,7 +140,6 @@ router.get(
       const limit = asInt(req.query.limit, 50);
       const skip  = asInt(req.query.skip, 0);
 
-      // 브랜드: 특정 공고의 지원자
       if (req.query.recruitId) {
         req.recruitId = req.query.recruitId;
         return assertOwnRecruit(req, res, async () => {
@@ -159,7 +173,6 @@ router.get(
         });
       }
 
-      // 쇼호스트: 내가 지원한 목록
       if (req.query.mine === '1' || req.query.mine === 'true') {
         const items = await Application.find({ createdBy: req.user.id })
           .sort({ createdAt: -1 }).skip(skip).limit(limit)
@@ -192,9 +205,9 @@ router.get(
   }
 );
 
-/* -----------------------------
- * GET /:id — 단건 조회(브랜드 소유/본인 지원)
- * ---------------------------*/
+/* ---------------------------------------
+ * GET /:id — 단건 조회
+ * -------------------------------------*/
 router.get(
   '/:id',
   auth,
@@ -222,10 +235,9 @@ router.get(
   }
 );
 
-/* -----------------------------
- * PATCH /:id — 상태 변경(브랜드/관리자)
- * body: { status: 'accepted' | 'rejected' | 'on_hold' }
- * ---------------------------*/
+/* ---------------------------------------
+ * PATCH /:id — 상태 변경
+ * -------------------------------------*/
 router.patch(
   '/:id',
   auth,
