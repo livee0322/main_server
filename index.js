@@ -69,9 +69,8 @@ app.use('/api/portfolio', require('./routes/portfolio'));
 // 태웅이 테스트 
 app.use(`${BASE_PATH}/recruit-test`, require('./routes/recruit-test'));
 app.use('/api/v1/news-test', require('./routes/news-test'));
-
-// ✅ 포트폴리오: 새 라우터로 교체 (기존 routes/portfolio 사용 X)
 app.use('/api/v1/portfolio-test', require('./routes/portfolio-test'));
+app.use('/api/v1/applications-test', require('./routes/applications-test'));
 
 // '/api/v1/portfolios'는 이미 위에서 `${BASE_PATH}/portfolios`로 마운트되어 있으니 중복 마운트 제거
 // app.use('/api/v1/portfolios', portfolioUnified);
