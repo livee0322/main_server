@@ -7,6 +7,8 @@ const auth = require("../src/middleware/auth")
 const optionalAuth = require("../src/middleware/optionalAuth")
 const requireRole = require("../src/middleware/requireRole")
 const { toThumb, toDTO } = require("../src/utils/common")
+const Application = require("../models/Application")
+const optionalAuth = require("../src/middleware/optionalAuth")
 
 const sanitize = (html) =>
     sanitizeHtml(html || "", {
@@ -89,7 +91,7 @@ router.post(
 
 /* List (검색, 정렬, 페이지네이션 기능 추가) */
 router.get(
-    "/",
+    optionalAuth,
     // 쿼리 파라미터 유효성 검사 추가 (선택사항이지만 안정성을 위해 추천)
     query("sort").optional().isIn(["latest", "deadline"]),
     async (req, res) => {
@@ -132,10 +134,23 @@ router.get(
             Campaign.countDocuments(q),
         ])
 
-        // 6. 응답 데이터 가공 (isAd 필드 추가)
+        // 현재 사용자의 지원 목록을 미리 조회
+        let appliedCampaignIds = new Set()
+        if (req.user) {
+            // 로그인한 경우에만 실행
+            const userApplications = await Application.find({
+                userId: req.user.id,
+            }).select("campaignId")
+            appliedCampaignIds = new Set(
+                userApplications.map((app) => app.campaignId.toString())
+            )
+        }
+
+        // 응답 데이터에 isApplied 필드 추가
         const items = docs.map((doc) => {
             const dto = toDTO(doc)
-            dto.isAd = false // 현재 광고 로직이 없으므로 false로 고정
+            dto.isAd = false
+            dto.isApplied = appliedCampaignIds.has(doc._id.toString()) // 지원 목록에 포함되어 있는지 확인
             return dto
         })
 
@@ -172,6 +187,21 @@ router.get("/:id", optionalAuth, async (req, res) => {
     if (!isOwner && c.status !== "published") {
         return res.fail("FORBIDDEN", "FORBIDDEN", 403)
     }
+
+    // 현재 사용자의 지원 여부 조회
+    let isApplied = false
+    if (req.user) {
+        // 로그인한 경우에만 실행
+        const application = await Application.findOne({
+            userId: req.user.id,
+            campaignId: c._id,
+        })
+        isApplied = !!application // 지원 정보가 있으면 true, 없으면 false
+    }
+
+    const dto = toDTO(c)
+    dto.isApplied = isApplied // 응답 DTO에 isApplied 필드 추가
+
     return res.ok({ data: toDTO(c) })
 })
 
