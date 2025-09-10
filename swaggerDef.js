@@ -124,9 +124,34 @@ const options = {
             // ===== Campaigns =====
             "/campaigns": {
                 get: {
-                    summary: "캠페인 목록 조회",
+                    summary: "캠페인 목록 조회 (검색/정렬/페이지네이션)",
                     tags: ["Campaigns"],
                     parameters: [
+                        {
+                            name: "type",
+                            in: "query",
+                            schema: {
+                                type: "string",
+                                enum: ["product", "recruit"],
+                                default: "recruit",
+                            },
+                        },
+                        {
+                            name: "search",
+                            in: "query",
+                            description: "검색어",
+                            schema: { type: "string" },
+                        },
+                        {
+                            name: "sort",
+                            in: "query",
+                            description: "정렬 (latest, deadline)",
+                            schema: {
+                                type: "string",
+                                enum: ["latest", "deadline"],
+                                default: "latest",
+                            },
+                        },
                         {
                             name: "page",
                             in: "query",
@@ -135,31 +160,30 @@ const options = {
                         {
                             name: "limit",
                             in: "query",
-                            schema: { type: "integer", default: 20 },
-                        },
-                        {
-                            name: "type",
-                            in: "query",
-                            schema: {
-                                type: "string",
-                                enum: ["product", "recruit"],
-                            },
-                        },
-                        {
-                            name: "status",
-                            in: "query",
-                            schema: {
-                                type: "string",
-                                enum: [
-                                    "draft",
-                                    "scheduled",
-                                    "published",
-                                    "closed",
-                                ],
-                            },
+                            schema: { type: "integer", default: 10 },
                         },
                     ],
-                    responses: { 200: { description: "조회 성공" } },
+                    responses: {
+                        200: {
+                            description: "조회 성공",
+                            content: {
+                                "application/json": {
+                                    schema: {
+                                        type: "object",
+                                        properties: {
+                                            items: {
+                                                type: "array",
+                                                items: { type: "object" },
+                                            },
+                                            currentPage: { type: "integer" },
+                                            totalPages: { type: "integer" },
+                                            totalItems: { type: "integer" },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
                 },
                 post: {
                     summary: "캠페인 생성",

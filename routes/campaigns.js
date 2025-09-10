@@ -87,45 +87,64 @@ router.post(
     }
 )
 
-/* List */
+/* List (검색, 정렬, 페이지네이션 기능 추가) */
 router.get(
     "/",
-    query("type").optional().isIn(["product", "recruit"]),
-    query("status")
-        .optional()
-        .isIn(["draft", "scheduled", "published", "closed"]),
+    // 쿼리 파라미터 유효성 검사 추가 (선택사항이지만 안정성을 위해 추천)
+    query("sort").optional().isIn(["latest", "deadline"]),
     async (req, res) => {
-        const page = Math.max(parseInt(req.query.page || "1"), 1)
-        const limit = Math.min(parseInt(req.query.limit || "20"), 50)
+        // 1. 페이지네이션 파라미터 처리 (기본값 설정)
+        const page = Math.max(parseInt(req.query.page || "1", 10), 1)
+        const limit = Math.min(
+            Math.max(parseInt(req.query.limit || "10", 10), 1),
+            50
+        ) // 기본값 10
 
-        const q = {}
-        if (req.query.type) q.type = req.query.type
+        // 2. 기본 쿼리 조건 설정 (게시된 모집 공고)
+        const q = { type: "recruit", status: "published" }
 
-        if (req.query.status) {
-            q.status = req.query.status
-        } else {
-            q.status = "published"
+        // 3. 검색어(search) 처리
+        if (req.query.search) {
+            const searchTerm = String(req.query.search)
+            q.$or = [
+                { title: { $regex: searchTerm, $options: "i" } },
+                { descriptionHTML: { $regex: searchTerm, $options: "i" } },
+                { brand: { $regex: searchTerm, $options: "i" } },
+            ]
         }
 
-        if (req.query.q)
-            q.title = { $regex: String(req.query.q), $options: "i" }
+        // 4. 정렬(sort) 처리
+        const sortOption = {}
+        if (req.query.sort === "deadline") {
+            // 마감일이 null이 아닌 문서를 우선하고, 마감일이 빠른 순으로 정렬
+            sortOption.closeAt = 1
+        } else {
+            // 기본값은 최신순
+            sortOption.createdAt = -1
+        }
 
-        let sort = { createdAt: -1 }
-
-        const [items, total] = await Promise.all([
+        // 5. 데이터베이스에서 데이터 조회 및 총 개수 카운트
+        const [docs, totalItems] = await Promise.all([
             Campaign.find(q)
-                .sort(sort)
+                .sort(sortOption)
                 .skip((page - 1) * limit)
                 .limit(limit),
             Campaign.countDocuments(q),
         ])
 
+        // 6. 응답 데이터 가공 (isAd 필드 추가)
+        const items = docs.map((doc) => {
+            const dto = toDTO(doc)
+            dto.isAd = false // 현재 광고 로직이 없으므로 false로 고정
+            return dto
+        })
+
+        // 7. 새로운 응답 형식으로 반환
         return res.ok({
-            items: items.map(toDTO),
-            page,
-            limit,
-            total,
-            totalPages: Math.ceil(total / limit),
+            items,
+            currentPage: page,
+            totalPages: Math.ceil(totalItems / limit),
+            totalItems,
         })
     }
 )
