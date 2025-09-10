@@ -71,6 +71,8 @@ app.use(`${BASE_PATH}/recruit-test`, require('./routes/recruit-test'));
 app.use('/api/v1/news-test', require('./routes/news-test'));
 app.use('/api/v1/portfolio-test', require('./routes/portfolio-test'));
 app.use('/api/v1/applications-test', require('./routes/applications-test'));
+app.use('/api/v1/shorts-test', shortsRouter);
+
 
 // '/api/v1/portfolios'는 이미 위에서 `${BASE_PATH}/portfolios`로 마운트되어 있으니 중복 마운트 제거
 // app.use('/api/v1/portfolios', portfolioUnified);
