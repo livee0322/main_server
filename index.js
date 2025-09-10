@@ -66,12 +66,12 @@ app.use('/api/auth',      require('./routes/user'));
 app.use('/api/portfolio', require('./routes/portfolio'));
 // '/api/recruit'는 이제 '/api/v1/campaigns?type=recruit'로 대체되었으므로 삭제합니다.
 
-// 태웅이 테스트 
-app.use(`${BASE_PATH}/recruit-test`, require('./routes/recruit-test'));
-app.use('/api/v1/news-test', require('./routes/news-test'));
-app.use('/api/v1/portfolio-test', require('./routes/portfolio-test'));
-app.use('/api/v1/applications-test', require('./routes/applications-test'));
-app.use('/api/v1/shorts-test', shortsRouter);
+// ===== 태웅이 테스트( test 라우터만 ) =====
+app.use(`${BASE_PATH}/recruit-test`,      require('./routes/recruit-test'));
+app.use(`${BASE_PATH}/news-test`,         require('./routes/news-test'));
+app.use(`${BASE_PATH}/portfolio-test`,    require('./routes/portfolio-test'));
+app.use(`${BASE_PATH}/applications-test`, require('./routes/applications-test'));
+app.use(`${BASE_PATH}/shorts-test`,       require('./routes/shorts-test')); // ✅ 이 줄만 추가/수정
 
 
 // '/api/v1/portfolios'는 이미 위에서 `${BASE_PATH}/portfolios`로 마운트되어 있으니 중복 마운트 제거
