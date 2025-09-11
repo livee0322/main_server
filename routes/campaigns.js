@@ -8,7 +8,6 @@ const optionalAuth = require("../src/middleware/optionalAuth")
 const requireRole = require("../src/middleware/requireRole")
 const { toThumb, toDTO } = require("../src/utils/common")
 const Application = require("../models/Application")
-const optionalAuth = require("../src/middleware/optionalAuth")
 
 const sanitize = (html) =>
     sanitizeHtml(html || "", {
