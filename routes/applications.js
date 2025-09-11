@@ -43,7 +43,7 @@ router.post(
     body("campaignId").isString().notEmpty(),
     body("profileRef").optional().isString().isLength({ max: 2000 }),
     body("message").optional().isString().isLength({ max: 5000 }),
-    async (req, res) => {
+    async (req, res, next) => {
         const errors = validationResult(req)
         if (!errors.isEmpty())
             return res.fail("VALIDATION_FAILED", 422, {
@@ -76,8 +76,11 @@ router.post(
             })
             return res.ok({ data: toDTO(created) }, 201)
         } catch (e) {
-            if (e?.code === 11000) return res.fail("ALREADY_APPLIED", 409)
-            throw e
+            if (e?.code === 11000) {
+                return res.fail("ALREADY_APPLIED", 409)
+            }
+            // 그 외의 모든 에러는 asyncHandler가 처리하도록 next로 넘깁니다.
+            return next(e)
         }
     }
 )
