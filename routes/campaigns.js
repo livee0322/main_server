@@ -85,79 +85,65 @@ router.post(
 )
 
 /* List (검색, 정렬, 페이지네이션 기능 추가) */
-router.get(
+router.get('/',
     optionalAuth,
-    // 쿼리 파라미터 유효성 검사 추가 (선택사항이지만 안정성을 위해 추천)
-    query("sort").optional().isIn(["latest", "deadline"]),
+    query('sort').optional().isIn(['latest', 'deadline']),
     async (req, res) => {
-        // 1. 페이지네이션 파라미터 처리 (기본값 설정)
-        const page = Math.max(parseInt(req.query.page || "1", 10), 1)
-        const limit = Math.min(
-            Math.max(parseInt(req.query.limit || "10", 10), 1),
-            50
-        ) // 기본값 10
+        // 1. 페이지네이션 파라미터 처리
+        const page = Math.max(parseInt(req.query.page || '1', 10), 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit || '10', 10), 1), 50);
 
         // 2. 기본 쿼리 조건 설정 (게시된 모집 공고)
-        const q = { type: "recruit", status: "published" }
+        const q = { type: 'recruit', status: 'published' };
 
         // 3. 검색어(search) 처리
         if (req.query.search) {
-            const searchTerm = String(req.query.search)
+            const searchTerm = String(req.query.search);
             q.$or = [
-                { title: { $regex: searchTerm, $options: "i" } },
-                { descriptionHTML: { $regex: searchTerm, $options: "i" } },
-                { brand: { $regex: searchTerm, $options: "i" } },
-            ]
+                { title: { $regex: searchTerm, $options: 'i' } },
+                { descriptionHTML: { $regex: searchTerm, $options: 'i' } },
+                { brand: { $regex: searchTerm, $options: 'i' } },
+            ];
         }
 
         // 4. 정렬(sort) 처리
-        const sortOption = {}
-        if (req.query.sort === "deadline") {
-            // 마감일이 null이 아닌 문서를 우선하고, 마감일이 빠른 순으로 정렬
-            sortOption.closeAt = 1
+        const sortOption = {};
+        if (req.query.sort === 'deadline') {
+            sortOption.closeAt = 1;
         } else {
-            // 기본값은 최신순
-            sortOption.createdAt = -1
+            sortOption.createdAt = -1;
         }
 
-        // 5. 데이터베이스에서 데이터 조회 및 총 개수 카운트
+        // 5. 데이터베이스 조회
         const [docs, totalItems] = await Promise.all([
-            Campaign.find(q)
-                .sort(sortOption)
-                .skip((page - 1) * limit)
-                .limit(limit),
+            Campaign.find(q).sort(sortOption).skip((page - 1) * limit).limit(limit),
             Campaign.countDocuments(q),
-        ])
+        ]);
 
-        // 현재 사용자의 지원 목록을 미리 조회
-        let appliedCampaignIds = new Set()
+        // 6. 사용자의 지원 여부 확인
+        let appliedCampaignIds = new Set();
         if (req.user) {
-            // 로그인한 경우에만 실행
-            const userApplications = await Application.find({
-                userId: req.user.id,
-            }).select("campaignId")
-            appliedCampaignIds = new Set(
-                userApplications.map((app) => app.campaignId.toString())
-            )
+            const userApplications = await Application.find({ userId: req.user.id }).select('campaignId');
+            appliedCampaignIds = new Set(userApplications.map(app => app.campaignId.toString()));
         }
 
-        // 응답 데이터에 isApplied 필드 추가
-        const items = docs.map((doc) => {
-            const dto = toDTO(doc)
-            dto.isAd = false
-            dto.isApplied = appliedCampaignIds.has(doc._id.toString()) // 지원 목록에 포함되어 있는지 확인
-            return dto
-        })
+        // 7. 응답 데이터 가공
+        const items = docs.map(doc => {
+            const dto = toDTO(doc);
+            dto.isAd = false;
+            dto.isApplied = appliedCampaignIds.has(doc._id.toString());
+            return dto;
+        });
 
-        // 7. 새로운 응답 형식으로 반환
+        // 8. 최종 응답 반환
         return res.ok({
             items,
             currentPage: page,
             totalPages: Math.ceil(totalItems / limit),
             totalItems,
-        })
+        });
     }
-)
+);
 
 /* Mine */
 router.get("/mine", auth, requireRole("brand", "admin"), async (req, res) => {
