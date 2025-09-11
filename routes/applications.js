@@ -46,18 +46,17 @@ router.post(
     async (req, res) => {
         const errors = validationResult(req)
         if (!errors.isEmpty())
-            return res.fail("VALIDATION_FAILED", "VALIDATION_FAILED", 422, {
+            return res.fail("VALIDATION_FAILED", 422, {
                 errors: errors.array(),
             })
 
         const { campaignId, profileRef, message } = req.body
         if (!mongoose.isValidObjectId(campaignId))
-            return res.fail("INVALID_ID", "INVALID_ID", 400)
+            return res.fail("INVALID_ID", 400)
 
         const c = await Campaign.findById(campaignId)
-        if (!c) return res.fail("NOT_FOUND", "NOT_FOUND", 404)
-        if (c.type !== "recruit")
-            return res.fail("BAD_REQUEST", "NOT_RECRUIT", 400)
+        if (!c) return res.fail("NOT_FOUND", 404)
+        if (c.type !== "recruit") return res.fail("NOT_RECRUIT", 400)
 
         // 마감 체크(있다면)
         const deadline = c.recruit?.deadline
@@ -65,7 +64,7 @@ router.post(
             deadline &&
             new Date(deadline) < new Date(new Date().toDateString())
         ) {
-            return res.fail("CLOSED", "DEADLINE_PASSED", 409)
+            return res.fail("DEADLINE_PASSED", 409)
         }
 
         try {
@@ -77,8 +76,7 @@ router.post(
             })
             return res.ok({ data: toDTO(created) }, 201)
         } catch (e) {
-            if (e?.code === 11000)
-                return res.fail("DUPLICATE", "ALREADY_APPLIED", 409)
+            if (e?.code === 11000) return res.fail("ALREADY_APPLIED", 409)
             throw e
         }
     }
@@ -92,18 +90,18 @@ router.get(
     async (req, res) => {
         const errors = validationResult(req)
         if (!errors.isEmpty())
-            return res.fail("VALIDATION_FAILED", "VALIDATION_FAILED", 422, {
+            return res.fail("VALIDATION_FAILED", 422, {
                 errors: errors.array(),
             })
 
         const { campaignId } = req.query
         if (!mongoose.isValidObjectId(campaignId))
-            return res.fail("INVALID_ID", "INVALID_ID", 400)
+            return res.fail("INVALID_ID", 400)
 
         const camp = await Campaign.findById(campaignId)
-        if (!camp) return res.fail("NOT_FOUND", "NOT_FOUND", 404)
+        if (!camp) return res.fail("NOT_FOUND", 404)
         const isOwner = String(camp.createdBy) === req.user.id
-        if (!isOwner) return res.fail("FORBIDDEN", "FORBIDDEN", 403)
+        if (!isOwner) return res.fail("FORBIDDEN", 403)
 
         const items = await Application.find({ campaignId })
             .populate("portfolio")
@@ -126,16 +124,15 @@ router.patch(
     ]),
     async (req, res) => {
         const { id } = req.params
-        if (!mongoose.isValidObjectId(id))
-            return res.fail("INVALID_ID", "INVALID_ID", 400)
+        if (!mongoose.isValidObjectId(id)) return res.fail("INVALID_ID", 400)
 
         // 소유자 검증
         const app = await Application.findById(id)
-        if (!app) return res.fail("NOT_FOUND", "NOT_FOUND", 404)
+        if (!app) return res.fail("NOT_FOUND", 404)
         const camp = await Campaign.findById(app.campaignId)
-        if (!camp) return res.fail("NOT_FOUND", "NOT_FOUND", 404)
+        if (!camp) return res.fail("NOT_FOUND", 404)
         const isOwner = String(camp.createdBy) === req.user.id
-        if (!isOwner) return res.fail("FORBIDDEN", "FORBIDDEN", 403)
+        if (!isOwner) return res.fail("FORBIDDEN", 403)
 
         app.status = req.body.status
         await app.save()

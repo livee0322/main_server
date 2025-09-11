@@ -66,18 +66,14 @@ router.post(
     async (req, res) => {
         const errors = validationResult(req)
         if (!errors.isEmpty())
-            return res.fail("VALIDATION_FAILED", "VALIDATION_FAILED", 422, {
+            return res.fail("VALIDATION_FAILED", 422, {
                 errors: errors.array(),
             })
 
         const payload = { ...req.body, createdBy: req.user.id }
         // '게시' 상태로 바로 생성 시 이미지 URL 필수 검증
         if (payload.status === "published" && !payload.coverImageUrl) {
-            return res.fail(
-                "게시 상태의 캠페인에는 커버 이미지가 반드시 필요합니다.",
-                "COVER_IMAGE_REQUIRED",
-                400
-            )
+            return res.fail("COVER_IMAGE_REQUIRED", 400)
         }
         if (payload.coverImageUrl && !payload.thumbnailUrl)
             payload.thumbnailUrl = toThumb(payload.coverImageUrl)
@@ -176,16 +172,16 @@ router.get("/mine", auth, requireRole("brand", "admin"), async (req, res) => {
 router.get("/:id", optionalAuth, async (req, res) => {
     const { id } = req.params
     if (!mongoose.isValidObjectId(id)) {
-        return res.fail("INVALID_ID", "INVALID_ID", 400)
+        return res.fail("INVALID_ID", 400)
     }
     const c = await Campaign.findById(id)
-    if (!c) return res.fail("NOT_FOUND", "NOT_FOUND", 404)
+    if (!c) return res.fail("NOT_FOUND", 404)
 
     // req.user가 있을 때만 isOwner를 판별
     // 비공개 상태(published가 아님)의 캠페인은 소유자만 볼 수 있도록 하는 로직은 그대로 유지
     const isOwner = req.user && String(c.createdBy) === req.user.id
     if (!isOwner && c.status !== "published") {
-        return res.fail("FORBIDDEN", "FORBIDDEN", 403)
+        return res.fail("FORBIDDEN", 403)
     }
 
     // 현재 사용자의 지원 여부 조회
@@ -208,19 +204,14 @@ router.get("/:id", optionalAuth, async (req, res) => {
 /* Update */
 router.put("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
     const { id } = req.params
-    if (!mongoose.isValidObjectId(id))
-        return res.fail("INVALID_ID", "INVALID_ID", 400)
+    if (!mongoose.isValidObjectId(id)) return res.fail("INVALID_ID", 400)
 
     // '게시' 상태로 변경 시 이미지 URL 필수 검증
     if (req.body.status === "published") {
         const campaign = await Campaign.findById(id)
         // DB에 저장된 이미지 URL도 없고, 새로 업데이트되는 값도 없을 경우 에러 처리
         if (!campaign.coverImageUrl && !req.body.coverImageUrl) {
-            return res.fail(
-                "게시 상태로 변경하려면 커버 이미지가 반드시 필요합니다.",
-                "COVER_IMAGE_REQUIRED",
-                400
-            )
+            return res.fail("COVER_IMAGE_REQUIRED", 400)
         }
     }
 
@@ -235,26 +226,20 @@ router.put("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
         { $set },
         { new: true }
     )
-    if (!updated) return res.fail("REJECTED", "RECRUIT_FORBIDDEN_EDIT", 403)
+    if (!updated) return res.fail("RECRUIT_FORBIDDEN_EDIT", 403)
     return res.ok({ data: toDTO(updated) })
 })
 
 /* Delete */
 router.delete("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
     const { id } = req.params
-    if (!mongoose.isValidObjectId(id))
-        return res.fail("INVALID_ID", "INVALID_ID", 400)
+    if (!mongoose.isValidObjectId(id)) return res.fail("INVALID_ID", 400)
 
     const removed = await Campaign.findOneAndDelete({
         _id: id,
         createdBy: req.user.id,
     })
-    if (!removed)
-        return res.fail(
-            "NOT_FOUND_OR_FORBIDDEN",
-            "RECRUIT_FORBIDDEN_DELETE",
-            403
-        )
+    if (!removed) return res.fail("RECRUIT_FORBIDDEN_DELETE", 403)
     return res.ok({ message: "삭제 완료" })
 })
 
