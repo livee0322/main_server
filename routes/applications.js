@@ -1,4 +1,3 @@
-// /routes/applications.js
 const router = require("express").Router()
 const { body, query, validationResult } = require("express-validator")
 const mongoose = require("mongoose")
@@ -6,6 +5,7 @@ const auth = require("../src/middleware/auth")
 const requireRole = require("../src/middleware/requireRole")
 const Campaign = require("../models/Campaign")
 const Application = require("../models/Application")
+const asyncHandler = require('../src/middleware/asyncHandler');
 
 const toDTO = (doc) => {
     const o = (doc?.toObject ? doc.toObject() : doc) || {}
