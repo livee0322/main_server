@@ -144,11 +144,16 @@ app.use((req, res, _next) => {
 /* ===== 에러 핸들러 ===== */
 app.use((err, _req, res, _next) => {
     console.error("🔥 Unhandled Error:", err)
-    res.fail(
-        err.message || "서버 오류",
-        err.code || "INTERNAL_ERROR",
-        err.status || 500
-    )
+    // 에러 유형에 따라 코드를 지정
+    let errorCode = err.code || "INTERNAL_ERROR"
+
+    // MongoDB 중복 키 에러 (e.g., 이미 지원한 경우)
+    if (err.code === 11000) {
+        errorCode = "ALREADY_APPLIED"
+    }
+    // res.fail을 한 번만 호출하여 응답을 보내기
+    // 상태 코드는 에러 객체에 지정된 것이 있으면 사용하고, 없으면 500을 기본값
+    return res.fail(errorCode, err.status || 500)
 })
 
 /* ===== 서버 시작 ===== */

@@ -43,7 +43,7 @@ router.post(
     body("campaignId").isString().notEmpty(),
     body("profileRef").optional().isString().isLength({ max: 2000 }),
     body("message").optional().isString().isLength({ max: 5000 }),
-    async (req, res, next) => {
+    asyncHandler(async (req, res) => {
         const errors = validationResult(req)
         if (!errors.isEmpty())
             return res.fail("VALIDATION_FAILED", 422, {
@@ -58,31 +58,23 @@ router.post(
         if (!c) return res.fail("NOT_FOUND", 404)
         if (c.type !== "recruit") return res.fail("NOT_RECRUIT", 400)
 
-        // 마감 체크(있다면)
         const deadline = c.recruit?.deadline
         if (
             deadline &&
             new Date(deadline) < new Date(new Date().toDateString())
         ) {
-            return res.fail("DEADLINE_PASSED", 409)
+            return res.fail("CLOSED", "DEADLINE_PASSED", 409)
         }
 
-        try {
-            const created = await Application.create({
-                campaignId,
-                userId: req.user.id,
-                profileRef,
-                message,
-            })
-            return res.ok({ data: toDTO(created) }, 201)
-        } catch (e) {
-            if (e?.code === 11000) {
-                return res.fail("ALREADY_APPLIED", 409)
-            }
-            // 그 외의 모든 에러는 asyncHandler가 처리하도록 next로 넘깁니다.
-            return next(e)
-        }
-    }
+        const created = await Application.create({
+            campaignId,
+            userId: req.user.id,
+            profileRef,
+            message,
+        })
+
+        return res.ok({ data: toDTO(created) }, 201)
+    })
 )
 
 /* 특정 캠페인 지원자 목록 (오너/관리자 전용) */
