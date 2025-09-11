@@ -1,10 +1,10 @@
-// index.js (Refactored - Model Unified)
 require("dotenv").config()
 const express = require("express")
 const cors = require("cors")
 const mongoose = require("mongoose")
 const swaggerUi = require("swagger-ui-express")
 const swaggerSpec = require("./swaggerDef")
+const errorMessages = require('./src/utils/errorMessages');
 
 const app = express()
 
@@ -90,29 +90,29 @@ app.use(`${BASE_PATH}/portfolio-test`, require("./routes/portfolio-test"))
 app.use(`${BASE_PATH}/applications-test`, require("./routes/applications-test"))
 app.use(`${BASE_PATH}/shorts-test`, require("./routes/shorts-test")) // ✅ 이 줄만 추가/수정
 
-// '/api/v1/portfolios'는 이미 위에서 `${BASE_PATH}/portfolios`로 마운트되어 있으니 중복 마운트 제거
-// app.use('/api/v1/portfolios', portfolioUnified);
-;(async () => {
-    try {
-        const exists = await mongoose.connection.db
-            .collection("portfolios")
-            .indexExists("user_1")
-        if (exists) {
-            await mongoose.connection.db
+    // '/api/v1/portfolios'는 이미 위에서 `${BASE_PATH}/portfolios`로 마운트되어 있으니 중복 마운트 제거
+    // app.use('/api/v1/portfolios', portfolioUnified);
+    ; (async () => {
+        try {
+            const exists = await mongoose.connection.db
                 .collection("portfolios")
-                .dropIndex("user_1")
-            console.log("[migrate] dropped legacy unique index user_1")
+                .indexExists("user_1")
+            if (exists) {
+                await mongoose.connection.db
+                    .collection("portfolios")
+                    .dropIndex("user_1")
+                console.log("[migrate] dropped legacy unique index user_1")
+            }
+        } catch (e) {
+            console.warn("[migrate] drop user_1 skipped:", e.message)
         }
-    } catch (e) {
-        console.warn("[migrate] drop user_1 skipped:", e.message)
-    }
-})()
+    })()
 
 /* ===== 헬스체크 ===== */
 const stateName = (s) =>
-    ({ 0: "disconnected", 1: "connected", 2: "connecting", 3: "disconnecting" }[
-        s
-    ] || String(s))
+({ 0: "disconnected", 1: "connected", 2: "connecting", 3: "disconnecting" }[
+    s
+] || String(s))
 app.get("/", (_req, res) => res.send("✅ Livee Main Server is running!"))
 app.get("/healthz", (_req, res) => {
     const dbState = mongoose.connection.readyState
