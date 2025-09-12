@@ -117,7 +117,7 @@ router.get(
         // (필요 시 기존 검색 로직 추가)
 
         const items = await Portfolio.find(query)
-            .sort({ createdAt: - detailedRegion })
+            .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
             .limit(limit)
             .select('nickname oneLineIntro mainThumbnailUrl tags experienceYears detailedRegion height');// 목록에 필요한 필드만 선택
