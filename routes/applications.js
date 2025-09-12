@@ -1,4 +1,3 @@
-// /routes/applications.js
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
 const mongoose = require('mongoose');
@@ -45,7 +44,7 @@ router.post('/',
         const { campaignId, profileRef, message } = req.body;
         const userId = req.user?.id;
 
-        // null 값이 DB로 전달되지 않도록 방어 로직 추가
+        // [핵심] null 값이 DB로 전달되지 않도록 방어 로직 추가
         if (!campaignId || !userId) {
             return res.fail('VALIDATION_FAILED', 422, { errors: [{ msg: 'Campaign ID and User ID are required.' }] });
         }
@@ -60,7 +59,6 @@ router.post('/',
             return res.fail('DEADLINE_PASSED', 409);
         }
 
-        // asyncHandler가 에러를 처리하므로 try...catch는 불필요
         const created = await Application.create({
             campaignId, userId, profileRef, message
         });
