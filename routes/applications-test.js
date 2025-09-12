@@ -1,5 +1,6 @@
 'use strict';
 
+console.log('[DEPLOYMENT CHECK] Running applications-TEST.js version: SUSPECT'); // 1. 확인용 로그
 const router = require('express').Router();
 const { body, param, query, validationResult } = require('express-validator');
 const mongoose = require('mongoose');
