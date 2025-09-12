@@ -1,3 +1,4 @@
+console.log('[DEPLOYMENT CHECK] Running applications.js version: 2025-09-22-FINAL');
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
 const mongoose = require('mongoose');
@@ -66,7 +67,7 @@ router.patch('/:id', auth, body('status').isIn(['submitted', 'reviewing', 'short
     if (!mongoose.isValidObjectId(id)) return res.fail('INVALID_ID', 400);
     const app = await Application.findById(id);
     if (!app) return res.fail('NOT_FOUND', 404);
-    const camp = await Application.findById(app.campaignId);
+    const camp = await Campaign.findById(app.campaignId);
     if (!camp) return res.fail('NOT_FOUND', 404);
     const isOwner = String(camp.createdBy) === req.user.id;
     if (!isOwner) return res.fail('FORBIDDEN', 403);
