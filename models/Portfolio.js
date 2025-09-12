@@ -16,7 +16,7 @@ const portfolioSchema = new mongoose.Schema(
     backgroundImageUrl: { type: String, trim: true },  // 프로필 배경 이미지
     subThumbnailUrls: [{ type: String, trim: true }],  // 추가 프로필 이미지 (최대 5개)
     tags: [{ type: String, trim: true }],              // 관련 태그 (예: #뷰티, #패션)
-    status: { type: String, enum: ['draft', 'published'], default: 'draft' }, // 상태 (임시저장/게시)
+    status: { type: String, enum: ['published'], default: 'published' }, // 상태 (게시)
     isAgePublic: { type: Boolean, default: true },      // 나이 공개 여부
     detailedRegion: { type: String, trim: true },       // 상세 지역 (예: 서울시 강남구)
     gender: { type: String, enum: ['male', 'female'] }, // 성별
