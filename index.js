@@ -89,6 +89,7 @@ app.use(`${BASE_PATH}/news-test`, require("./routes/news-test"))
 app.use(`${BASE_PATH}/portfolio-test`, require("./routes/portfolio-test"))
 app.use(`${BASE_PATH}/applications-test`, require("./routes/applications-test"))
 app.use(`${BASE_PATH}/shorts-test`, require("./routes/shorts-test")) // ✅ 이 줄만 추가/수정
+app.use('/api/v1/brands-test', require('./routes/brands-test'));
 
     // '/api/v1/portfolios'는 이미 위에서 `${BASE_PATH}/portfolios`로 마운트되어 있으니 중복 마운트 제거
     // app.use('/api/v1/portfolios', portfolioUnified);
