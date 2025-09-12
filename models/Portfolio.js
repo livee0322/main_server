@@ -7,24 +7,36 @@ const portfolioSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    nickname: { type: String, trim: true },
-    oneLineIntro: { type: String, trim: true },
-    detailedIntro: { type: String },
-    experienceYears: { type: Number },
-    age: { type: Number },
-    mainLink: { type: String, trim: true },
-    mainThumbnailUrl: { type: String, trim: true },
-    backgroundImageUrl: { type: String, trim: true },
-    subThumbnailUrls: [{ type: String, trim: true }],
-    publicScope: { type: String, default: '전체공개' },
-    isReceivingOffers: { type: Boolean, default: true },
-    recentLives: [{
+    nickname: { type: String, trim: true },            // 닉네임
+    oneLineIntro: { type: String, trim: true },        // 한 줄 소개
+    detailedIntro: { type: String },                   // 상세 소개
+    experienceYears: { type: Number },                 // 경력(년차)
+    age: { type: Number },                             // 나이
+    mainThumbnailUrl: { type: String, trim: true },    // 메인 프로필 이미지
+    backgroundImageUrl: { type: String, trim: true },  // 프로필 배경 이미지
+    subThumbnailUrls: [{ type: String, trim: true }],  // 추가 프로필 이미지 (최대 5개)
+    tags: [{ type: String, trim: true }],              // 관련 태그 (예: #뷰티, #패션)
+    status: { type: String, enum: ['draft', 'published'], default: 'draft' }, // 상태 (임시저장/게시)
+    isAgePublic: { type: Boolean, default: true },      // 나이 공개 여부
+    detailedRegion: { type: String, trim: true },       // 상세 지역 (예: 서울시 강남구)
+    gender: { type: String, enum: ['male', 'female'] }, // 성별
+    height: { type: Number },                           // 키 (cm)
+    weight: { type: Number },                           // 몸무게 (kg)
+    topSize: { type: String, trim: true },              // 상의 사이즈 (예: S, M, L, 95)
+    bottomSize: { type: String, trim: true },           // 하의 사이즈 (예: 26, 28, 30)
+    shoeSize: { type: Number },                         // 신발 사이즈 (예: 240, 270)
+    isSizingPublic: { type: Boolean, default: true },   // 신체 사이즈 공개 여부
+    websiteUrl: { type: String, trim: true },           // 개인 웹사이트 URL
+    instagramUrl: { type: String, trim: true },         // 인스타그램 URL
+    youtubeUrl: { type: String, trim: true },           // 유튜브 URL
+    tiktokUrl: { type: String, trim: true },            // 틱톡 URL
+    publicScope: { type: String, default: '전체공개' },     // 공개 범위
+    isReceivingOffers: { type: Boolean, default: true },  // 제안 받기 여부
+    recentLives: [{                                     // 최근 라이브 방송 목록
       title: { type: String, trim: true },
-      url:   { type: String, trim: true },
-      date:  { type: Date }
+      url: { type: String, trim: true },
+      date: { type: Date }
     }],
-    tags: [{ type: String, trim: true }],
-    status: { type: String, enum: ['draft','published'], default: 'draft' },
   },
   { timestamps: true }
 );
