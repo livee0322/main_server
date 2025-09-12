@@ -66,7 +66,7 @@ router.patch('/:id', auth, body('status').isIn(['submitted', 'reviewing', 'short
     if (!mongoose.isValidObjectId(id)) return res.fail('INVALID_ID', 400);
     const app = await Application.findById(id);
     if (!app) return res.fail('NOT_FOUND', 404);
-    const camp = await Campaign.findById(app.campaignId);
+    const camp = await Application.findById(app.campaignId);
     if (!camp) return res.fail('NOT_FOUND', 404);
     const isOwner = String(camp.createdBy) === req.user.id;
     if (!isOwner) return res.fail('FORBIDDEN', 403);
