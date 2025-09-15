@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { body, validationResult } = require('express-validator');
+const { body, param, validationResult } = require('express-validator');
 const auth = require('../src/middleware/auth');
 const Shorts = require('../models/Shorts');
 const asyncHandler = require('../src/middleware/asyncHandler');
