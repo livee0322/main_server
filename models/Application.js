@@ -46,4 +46,8 @@ ApplicationSchema.virtual("portfolio", {
     justOne: true,
 })
 
-module.exports = mongoose.model("Application", ApplicationSchema)
+module.exports = mongoose.model(
+    "Application",
+    ApplicationSchema,
+    "applications-dev"
+)
