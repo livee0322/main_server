@@ -76,6 +76,7 @@ app.use(`${BASE_PATH}/campaigns`, require("./routes/campaigns")) // ✅ 백틱 �
 app.use(`${BASE_PATH}/applications`, require("./routes/applications"))
 app.use(`${BASE_PATH}/scrape`, require("./routes/scrape"))
 app.use(`${BASE_PATH}/track`, require("./routes/track"))
+app.use(`${BASE_PATH}/clips`, require("./routes/clips"));
 
 // 구버전 호환
 app.use("/api/auth", require("./routes/user"))
