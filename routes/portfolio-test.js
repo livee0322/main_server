@@ -10,6 +10,10 @@ const Portfolio = require('../models/Portfolio-test');
 
 const optionalAuth = auth.optional ? auth.optional() : (_req,_res,next)=>next();
 
+// ====== CONFIG: 프론트와 맞춘 제한값 ======
+const MAX_SUBS = 12;     // (변경) 갤러리 최대 12장
+const MAX_TAGS = 12;     // (변경) 태그 최대 12개
+
 // ── utils ──────────────────────────────────────────────────────────
 const sanitize = (html='') => sanitizeHtml(html, {
   allowedTags: sanitizeHtml.defaults.allowedTags.concat(['img','h1','h2','u','span','figure','figcaption']),
@@ -18,7 +22,6 @@ const sanitize = (html='') => sanitizeHtml(html, {
 });
 const strip = (html='') => String(html||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
 
-// 요청 본문: 빈문자열 제거 + 구버전 → 통일 키 매핑
 function compatBody(b){
   const out = {};
   for (const k of Object.keys(b||{})) out[k] = (b[k] === '' ? undefined : b[k]);
@@ -30,33 +33,34 @@ function compatBody(b){
   return out;
 }
 
-// DB 문서 → 클라이언트 통일 응답(홈/리스트/수정 모두 같은 필드)
 function unifyDoc(d){
   const o = (typeof d.toObject === 'function') ? d.toObject() : { ...d };
   o.id = String(o._id || o.id || '');
   o.nickname = o.nickname || o.displayName || o.name || '';
-
-  // headline 폴백: intro/introduction/oneLiner/summary → bio 스니펫(60자)
   o.headline =
     o.headline ||
     o.intro || o.introduction || o.oneLiner || o.summary ||
     (o.bio ? strip(o.bio).slice(0,60) : '') ||
     '';
-
   o.mainThumbnailUrl = o.mainThumbnailUrl || o.mainThumbnail || '';
   o.coverImageUrl    = o.coverImageUrl    || o.coverImage    || '';
   o.subThumbnails    = (Array.isArray(o.subThumbnails) && o.subThumbnails.length)
                         ? o.subThumbnails
                         : (Array.isArray(o.subImages) ? o.subImages : []);
+
+  // (신규 필드가 있어도 항상 내려가도록 보존)
   return o;
 }
 
-// 저장 전 정규화(형식 보정만; 기본값 주입은 POST에서만)
 function normalizePayload(p){
   const out = { ...p };
   if (out.bio) out.bio = sanitize(String(out.bio));
-  if (Array.isArray(out.tags)) out.tags = [...new Set(out.tags.map(t => String(t).trim()).filter(Boolean))].slice(0,8);
-  if (Array.isArray(out.subThumbnails)) out.subThumbnails = out.subThumbnails.filter(Boolean).slice(0,5);
+
+  // (변경) 태그/서브썸네일 상한 12로 상향
+  if (Array.isArray(out.tags)) out.tags = [...new Set(out.tags.map(t => String(t).trim()).filter(Boolean))].slice(0, MAX_TAGS);
+  if (Array.isArray(out.subThumbnails)) out.subThumbnails = out.subThumbnails.filter(Boolean).slice(0, MAX_SUBS);
+
+  // 라이브 링크 보정
   if (Array.isArray(out.liveLinks)) {
     out.liveLinks = out.liveLinks.map(l=>({
       title: l?.title ? String(l.title).trim() : '',
@@ -64,13 +68,24 @@ function normalizePayload(p){
       date:  l?.date  ? new Date(l.date)       : undefined
     })).filter(l=>l.title || l.url);
   }
+
   if (out.careerYears !== undefined) out.careerYears = Number(out.careerYears);
   if (out.age         !== undefined) out.age         = Number(out.age);
-  // ❌ 여기서 status/visibility 기본값을 넣지 않는다(POST에서만)
+
+  // (선택) 첨부파일(attachments) 보정
+  if (Array.isArray(out.attachments)) {
+    out.attachments = out.attachments.map(a => ({
+      name: a?.name ? String(a.name).trim() : '',
+      url:  a?.url  ? String(a.url).trim()  : '',
+      size: a?.size ? Number(a.size)        : undefined,
+      type: a?.type ? String(a.type)        : undefined,
+    })).filter(a => a.url);
+  }
+
+  // (선택) region / links / demographics 등은 그대로 통과(검증 룰은 아래 baseSchema에 추가)
   return out;
 }
 
-// 발행 검증(필수값) — bio 제한 없음
 function publishedGuard(req, res, next){
   const p = req.body || {};
   if ((p.status || 'draft') !== 'published') return next();
@@ -82,32 +97,64 @@ function publishedGuard(req, res, next){
   next();
 }
 
-// 공통 스키마(유효성)
+// ── 검증 스키마(프론트 v2.0 반영) ─────────────────────────────────
 const baseSchema = [
   body('*').customSanitizer(v => (v === '' ? undefined : v)),
-  body('name').optional().custom((_, { req }) => { if (!req.body.nickname && typeof req.body.name === 'string') req.body.nickname = req.body.name.trim(); delete req.body.name; return true; }),
+
+  // 기본 필드
   body('status').optional().isIn(['draft','published']),
+  // 공개/비공개만 쓰려면 아래 배열에서 'unlisted' 제거
   body('visibility').optional().isIn(['public','unlisted','private']),
   body('nickname').optional().isString().trim().isLength({ min:1, max:80 }),
   body('headline').optional().isString().trim().isLength({ min:1, max:120 }),
   body('bio').optional().isString().isLength({ max:5000 }),
+
+  // 이미지/갤러리
   body('mainThumbnailUrl').optional().isURL({ protocols:['http','https'], require_protocol:true }),
   body('coverImageUrl').optional().isURL({ protocols:['http','https'], require_protocol:true }),
-  body('subThumbnails').optional().isArray({ max:5 }),
+  body('subThumbnails').optional().isArray({ max: MAX_SUBS }),
   body('subThumbnails.*').optional().isURL({ protocols:['http','https'], require_protocol:true }),
-  body('tags').optional().isArray({ max:8 }),
+
+  // 태그
+  body('tags').optional().isArray({ max: MAX_TAGS }),
   body('tags.*').optional().isString().trim().isLength({ min:1, max:30 }),
+
+  // 라이브 링크
   body('liveLinks').optional().isArray({ max:50 }),
   body('liveLinks.*.title').optional().isString().trim().isLength({ max:120 }),
   body('liveLinks.*.url').optional().isURL({ protocols:['http','https'], require_protocol:true }),
   body('liveLinks.*.date').optional().isISO8601().toDate(),
+
+  // 숫자
   body('careerYears').optional().isInt({ min:0, max:50 }).toInt(),
   body('age').optional().isInt({ min:14, max:99 }).toInt(),
+
+  // 공개/옵션 플래그
   body('realName').optional().isString().trim().isLength({ max:80 }),
   body('realNamePublic').optional().isBoolean().toBoolean(),
   body('agePublic').optional().isBoolean().toBoolean(),
   body('openToOffers').optional().isBoolean().toBoolean(),
+
+  // 대표/외부 링크(3개만 받는다면 website/instagram/youtube만)
   body('primaryLink').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+  body('links').optional().isObject(),
+  body('links.website').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+  body('links.instagram').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+  body('links.youtube').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+  body('links.tiktok').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+
+  // 지역
+  body('region').optional().isObject(),
+  body('region.city').optional().isString().trim().isLength({ max:50 }),
+  body('region.area').optional().isString().trim().isLength({ max:50 }),
+  body('region.country').optional().isString().trim().isLength({ max:2 }),
+
+  // 첨부파일(선택)
+  body('attachments').optional().isArray({ max:50 }),
+  body('attachments.*.name').optional().isString().trim().isLength({ max:120 }),
+  body('attachments.*.url').optional().isURL({ protocols:['http','https'], require_protocol:true }),
+  body('attachments.*.size').optional().isInt({ min:0 }).toInt(),
+  body('attachments.*.type').optional().isString().trim().isLength({ max:60 }),
 ];
 
 function sendValidationIfAny(req, res, next){
@@ -118,7 +165,6 @@ function sendValidationIfAny(req, res, next){
 
 // ── CRUD ───────────────────────────────────────────────────────────
 
-// Create
 router.post('/',
   auth, requireRole('showhost','admin'),
   (req,_res,next)=>{ req.body = compatBody(req.body); next(); },
@@ -126,7 +172,6 @@ router.post('/',
   async (req,res)=>{
     try{
       const payload = normalizePayload(req.body || {});
-      // ✅ 기본값은 생성 시에만
       payload.type = 'portfolio';
       if (payload.status === undefined)     payload.status = 'draft';
       if (payload.visibility === undefined) payload.visibility = 'public';
@@ -141,7 +186,6 @@ router.post('/',
   }
 );
 
-// List
 router.get('/',
   optionalAuth,
   query('status').optional().isIn(['draft','published']),
@@ -157,6 +201,7 @@ router.get('/',
         q.createdBy = req.user.id;
       } else {
         q.status = 'published';
+        // 공개/비공개만 쓰려면 ['public']로 줄이면 됩니다.
         q.visibility = { $in:['public','unlisted'] };
       }
       if (req.query.status) q.status = req.query.status;
@@ -176,7 +221,6 @@ router.get('/',
   }
 );
 
-// Read
 router.get('/:id', optionalAuth, async (req,res)=>{
   const { id } = req.params;
   if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
@@ -184,7 +228,7 @@ router.get('/:id', optionalAuth, async (req,res)=>{
     const doc = await Portfolio.findById(id);
     if (!doc) return res.status(404).json({ ok:false, message:'NOT_FOUND' });
     const isOwner = req.user && String(doc.createdBy) === req.user.id;
-    const isPublic = doc.status === 'published' && ['public','unlisted'].includes(doc.visibility);
+    const isPublic = doc.status === 'published' && ['public','unlisted'].includes(doc.visibility); // 필요시 'public'만
     if (!isOwner && !isPublic) return res.status(403).json({ ok:false, message:'FORBIDDEN' });
     return res.json({ data: unifyDoc(doc) });
   }catch(err){
@@ -193,7 +237,6 @@ router.get('/:id', optionalAuth, async (req,res)=>{
   }
 });
 
-// Update
 router.put('/:id',
   auth, requireRole('showhost','admin'),
   (req,_res,next)=>{ req.body = compatBody(req.body); next(); },
@@ -203,8 +246,7 @@ router.put('/:id',
     if (!mongoose.isValidObjectId(id)) return res.status(400).json({ ok:false, message:'INVALID_ID' });
     try{
       const payload = normalizePayload(req.body || {});
-      // ❗여기서는 status/visibility 기본값 주입 금지(넘어온 값만 변경)
-      payload.type = 'portfolio'; // 무해한 보정(선택)
+      payload.type = 'portfolio';
       const updated = await Portfolio.findOneAndUpdate(
         { _id:id, createdBy: req.user.id },
         { $set: payload },
@@ -219,7 +261,6 @@ router.put('/:id',
   }
 );
 
-// Delete
 router.delete('/:id',
   auth, requireRole('showhost','admin'),
   async (req,res)=>{
