@@ -39,6 +39,7 @@ const portfolioSchema = new mongoose.Schema(
                 date: { type: Date },
             },
         ],
+        attachedFileUrl: { type: String, trim: true }, // Cloudinary에 업로드된 첨부 파일의 UR
     },
     { timestamps: true }
 )
