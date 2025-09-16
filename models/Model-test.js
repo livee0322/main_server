@@ -1,68 +1,65 @@
 'use strict';
 const { Schema, model } = require('mongoose');
 
+const LinkSchema = new Schema({
+  website:   { type: String, trim: true },
+  instagram: { type: String, trim: true },
+  youtube:   { type: String, trim: true }
+}, { _id:false });
+
+const RegionSchema = new Schema({
+  country: { type: String, trim: true, default: 'KR' },
+  city:    { type: String, trim: true },
+  area:    { type: String, trim: true }
+}, { _id:false });
+
+const DemographicsSchema = new Schema({
+  gender:   { type: String, enum: ['', 'female','male','other'], default: '' },
+  height:   { type: Number, min: 100, max: 220 },
+  weight:   { type: Number, min: 30,  max: 150 },
+  sizeTop:    { type: String, trim: true },
+  sizeBottom: { type: String, trim: true },
+  shoe:       { type: String, trim: true },
+
+  // 공개 스위치
+  sizePublic:    { type: Boolean, default: false },
+  agePublic:     { type: Boolean, default: false },
+  genderPublic:  { type: Boolean, default: false },
+  regionPublic:  { type: Boolean, default: false },
+  careerPublic:  { type: Boolean, default: false },
+}, { _id:false });
+
 const ModelSchema = new Schema({
-  type:       { type: String, default: 'model' },
+  type: { type: String, default: 'model', index: true },
 
-  // 공개/발행
-  status:     { type: String, enum: ['draft','published'], default: 'draft' },
-  visibility: { type: String, enum: ['public','unlisted','private'], default: 'public' },
+  status:     { type: String, enum: ['draft','published'], default: 'draft', index: true },
+  visibility: { type: String, enum: ['public','private'],  default: 'public', index: true },
 
-  // 기본 정보
-  nickname: { type: String, trim: true },
-  headline: { type: String, trim: true },   // 한 줄 소개
-  bio:      { type: String, default: '' },
+  nickname: { type: String, trim: true },        // 필수(발행 시)
+  headline: { type: String, trim: true },        // 필수(발행 시)
+  bio:      { type: String, default: '' },       // sanitize 된 HTML
 
   // 이미지
   mainThumbnailUrl: { type: String, trim: true },
   coverImageUrl:    { type: String, trim: true },
-  subThumbnails:    [{ type: String, trim: true }],
+  subThumbnails:    [{ type: String, trim: true, maxlength: 350 }], // 최대 5장 사용
 
-  // 과거 호환 필드(읽기 전용 느낌)
-  mainThumbnail: { type: String, trim: true },
-  coverImage:    { type: String, trim: true },
-  subImages:     [{ type: String, trim: true }],
-  displayName:   { type: String, trim: true },
-  name:          { type: String, trim: true },
+  // 추가 메타
+  careerYears: { type: Number, min: 0, max: 50 },
+  age:         { type: Number, min: 14, max: 99 },
 
-  // 프로필 수치
-  careerYears: { type: Number, min:0, max:50 },
-  age:         { type: Number, min: 12, max: 99 },
+  // 링크/지역/디모그래픽
+  links:        { type: LinkSchema, default: () => ({}) },
+  region:       { type: RegionSchema, default: () => ({ country: 'KR' }) },
+  demographics: { type: DemographicsSchema, default: () => ({}) },
 
-  // 공개/제안
+  tags: [{ type: String, trim: true, maxlength: 30 }],
+
   openToOffers: { type: Boolean, default: true },
-  primaryLink:  { type: String, trim: true },
 
-  // 지역/데모그래픽/소셜
-  region: {
-    city:    { type: String, trim: true },
-    area:    { type: String, trim: true },
-    country: { type: String, trim: true, default: 'KR' }
-  },
-  demographics: {
-    gender:  { type: String, enum:['female','male','other',''], default: '' },
-    height:  { type: Number, min: 100, max: 220 },
-    weight:  { type: Number, min: 30, max: 200 },
-    sizeTop:    { type: String, trim: true },
-    sizeBottom: { type: String, trim: true },
-    shoe:       { type: String, trim: true },
-    sizePublic: { type: Boolean, default: false }
-  },
-  links: {
-    website:   { type: String, trim: true },
-    instagram: { type: String, trim: true },
-    youtube:   { type: String, trim: true },
-    tiktok:    { type: String, trim: true }
-  },
-
-  // 기타
-  tags: [{ type: String, trim: true }],
-  shorts: [{ type: String, trim: true }], // 선택: 연결된 숏폼 ID
-
-  createdBy: { type: Schema.Types.ObjectId, ref: 'User', index: true }
+  createdBy: { type: Schema.Types.ObjectId, ref: 'User', index: true },
 }, { timestamps: true });
 
 ModelSchema.index({ createdAt: -1 });
-ModelSchema.index({ status: 1, visibility: 1 });
 
 module.exports = model('ModelTest', ModelSchema);
