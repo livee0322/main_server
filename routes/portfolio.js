@@ -37,7 +37,8 @@ router.post(
     auth,
     requireRole("showhost"),
     asyncHandler(async (req, res) => {
-        // 중요: 요청 본문(req.body)에 현재 로그인된 사용자 ID를 추가하여 문서를 생성합니다.
+        delete req.body.tags;
+
         const payload = { ...req.body, user: req.user.id }
         const created = await Portfolio.create(payload)
         return res.ok(
@@ -60,12 +61,12 @@ router.put(
     auth,
     requireRole("showhost"),
     asyncHandler(async (req, res) => {
-        // 중요: portfolioId와 user.id가 모두 일치하는 문서를 찾아 수정합니다.
-        // 이를 통해 다른 사람의 포트폴리오를 수정하는 것을 방지합니다.
+        delete req.body.tags;
+
         const updated = await Portfolio.findOneAndUpdate(
             { _id: req.params.id, user: req.user.id },
             { $set: req.body },
-            { new: true } // 수정된 후의 문서를 반환하도록 설정
+            { new: true }
         )
 
         if (!updated) {
@@ -120,7 +121,7 @@ router.get(
             .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
             .limit(limit)
-            .select('nickname oneLineIntro mainThumbnailUrl tags experienceYears detailedRegion height');// 목록에 필요한 필드만 선택
+            .select('nickname oneLineIntro mainThumbnailUrl experienceYears detailedRegion height');
 
         return res.ok({ items })
     })
