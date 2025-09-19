@@ -4,6 +4,7 @@ const Portfolio = require("../models/Portfolio")
 const auth = require("../src/middleware/auth")
 const requireRole = require("../src/middleware/requireRole")
 const asyncHandler = require("../src/middleware/asyncHandler") // 비동기 에러 핸들링
+const mongoose = require("mongoose") // ObjectId 유효성 검사를 위해 mongoose를 import
 
 // ----------------------------------------------------------------
 // [신규/변경 API] 쇼호스트 본인 포트폴리오 관리 (다중)
@@ -37,7 +38,7 @@ router.post(
     auth,
     requireRole("showhost"),
     asyncHandler(async (req, res) => {
-        delete req.body.tags;
+        delete req.body.tags
 
         const payload = { ...req.body, user: req.user.id }
         const created = await Portfolio.create(payload)
@@ -61,7 +62,7 @@ router.put(
     auth,
     requireRole("showhost"),
     asyncHandler(async (req, res) => {
-        delete req.body.tags;
+        delete req.body.tags
 
         const updated = await Portfolio.findOneAndUpdate(
             { _id: req.params.id, user: req.user.id },
@@ -121,7 +122,9 @@ router.get(
             .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
             .limit(limit)
-            .select('nickname oneLineIntro mainThumbnailUrl experienceYears detailedRegion height');
+            .select(
+                "nickname oneLineIntro mainThumbnailUrl experienceYears detailedRegion height"
+            )
 
         return res.ok({ items })
     })
@@ -135,7 +138,11 @@ router.get(
 router.get(
     "/:id",
     asyncHandler(async (req, res) => {
-        // 중요: _id로 문서를 찾고, 공개 조건(publicScope, status)을 만족하는지 확인합니다.
+        // 요청된 ID가 유효한 MongoDB ObjectId 형식인지 먼저 확인하여 CastError를 방지
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            return res.fail("NOT_FOUND", 404) // 유효하지 않으면 404 에러를 반환
+        }
+        // _id로 문서를 찾고, 공개 조건(publicScope, status)을 만족하는지 확인
         const doc = await Portfolio.findOne({
             _id: req.params.id,
             publicScope: "전체공개",
