@@ -58,6 +58,34 @@ router.get(
 )
 
 /**
+ * @route   GET /api/v1/models/:id
+ * @desc    id와 일치하는 특정 모델 1명의 모든 상세 정보를 조회
+ * @access  Public
+ */
+router.get(
+    "/:id",
+    asyncHandler(async (req, res) => {
+        const { id } = req.params // URL 경로에서 조회할 모델의 ID를 가져오기
+
+        // URL로 받은 id가 유효한 MongoDB ObjectId 형식인지 검사합니다.
+        if (!mongoose.isValidObjectId(id)) {
+            return res.fail("INVALID_ID", 400) // 유효하지 않으면 400 에러
+        }
+
+        // 데이터베이스에서 해당 ID를 가진 모델을 찾기
+        const model = await Model.findById(id)
+
+        // 모델을 찾지 못한 경우, 404 Not Found 에러
+        if (!model) {
+            return res.fail("NOT_FOUND", 404)
+        }
+
+        // 성공적으로 모델을 찾은 경우, 해당 모델의 정보를 반환
+        return res.ok({ data: model })
+    })
+)
+
+/**
  * @route   DELETE /api/v1/models/:id
  * @desc    특정 ID를 가진 모델 프로필을 삭제
  * @access  Private (Owner)
