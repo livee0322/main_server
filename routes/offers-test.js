@@ -1,4 +1,4 @@
-// routes/offers-test.js — v1.2.0 (GET received/sent, POST, PATCH 상태변경)
+// routes/offers-test.js — v1.2.1 (populate 'PortfolioTest' 명시, 에러 메시지 정리)
 'use strict';
 const router = require('express').Router();
 const { body, query, param, validationResult } = require('express-validator');
@@ -13,7 +13,7 @@ const Portfolio = require('../models/Portfolio-test');
 const ok   = (res, payload, status=200)=>res.status(status).json(payload);
 const fail = (res, code, message, status=400, extra={}) => res.status(status).json({ ok:false, code, message, ...extra });
 
-/* Create: 브랜드/관리자 */
+/* Create */
 router.post('/',
   auth, requireRole('brand','admin'),
   body('toPortfolioId').isString().isLength({min:1}),
@@ -46,12 +46,12 @@ router.post('/',
       return ok(res, { data: created }, 201);
     }catch(err){
       console.error('[offers-test:create]', err);
-      return fail(res,'CREATE_FAILED',err.message||'CREATE_FAILED',500);
+      return fail(res,'CREATE_FAILED', err.message || 'CREATE_FAILED', 500);
     }
   }
 );
 
-/* List: 받은/보낸 (box=received|sent) */
+/* List: 받은/보낸 */
 router.get('/',
   auth,
   query('box').optional().isIn(['received','sent']),
@@ -71,8 +71,9 @@ router.get('/',
         Offer.find(q)
           .sort({ createdAt:-1 })
           .skip((page-1)*limit).limit(limit)
-          .populate({ path:'toPortfolioId', select:'nickname mainThumbnailUrl subThumbnails createdBy' })
-          .populate({ path:'recruitId', select:'title thumbnailUrl' })
+          // ▼ ref 이름과 일치하도록 model 명시
+          .populate({ path:'toPortfolioId', model:'PortfolioTest', select:'nickname mainThumbnailUrl subThumbnails createdBy' })
+          .populate({ path:'recruitId', model:'Recruit-test', select:'title thumbnailUrl' })
           .lean(),
         Offer.countDocuments(q)
       ]);
@@ -80,19 +81,21 @@ router.get('/',
       return ok(res, { items, page, limit, total, totalPages: Math.ceil(total/limit) });
     }catch(err){
       console.error('[offers-test:list]', err);
-      return fail(res,'LIST_FAILED',err.message||'LIST_FAILED',500);
+      // 토큰 만료 시 401로 내려주면 프런트가 안내할 수 있어요.
+      if (String(err.name).includes('TokenExpired')) return fail(res,'TOKEN_EXPIRED','TOKEN_EXPIRED',401);
+      return fail(res,'LIST_FAILED', err.message || 'LIST_FAILED', 500);
     }
   }
 );
 
-/* Read (선택) */
+/* Read */
 router.get('/:id', auth, param('id').isString(), async (req,res)=>{
   const { id } = req.params;
   if(!mongoose.isValidObjectId(id)) return fail(res,'INVALID_ID','INVALID_ID',400);
   try{
     const doc = await Offer.findById(id)
-      .populate({ path:'toPortfolioId', select:'nickname mainThumbnailUrl' })
-      .populate({ path:'recruitId', select:'title thumbnailUrl' });
+      .populate({ path:'toPortfolioId', model:'PortfolioTest', select:'nickname mainThumbnailUrl' })
+      .populate({ path:'recruitId', model:'Recruit-test', select:'title thumbnailUrl' });
     if(!doc) return fail(res,'NOT_FOUND','NOT_FOUND',404);
 
     const isOwner = String(doc.createdBy) === req.user.id;
@@ -102,14 +105,11 @@ router.get('/:id', auth, param('id').isString(), async (req,res)=>{
     return ok(res,{ data: doc });
   }catch(err){
     console.error('[offers-test:read]',err);
-    return fail(res,'READ_FAILED',err.message||'READ_FAILED',500);
+    return fail(res,'READ_FAILED', err.message || 'READ_FAILED', 500);
   }
 });
 
-/* Update status
-   - 수신자(toUser): pending→on_hold|accepted|rejected 로 변경 가능
-   - 발신자(createdBy): pending 상태만 withdrawn 가능
-*/
+/* Update status */
 router.patch('/:id/status',
   auth,
   param('id').isString(),
@@ -128,7 +128,6 @@ router.patch('/:id/status',
       const isOwner = String(doc.createdBy) === me;
       const isRcpt  = String(doc.toUser)    === me;
 
-      // 권한/전이 규칙
       if (isRcpt) {
         if (!['on_hold','accepted','rejected','pending'].includes(want))
           return fail(res,'FORBIDDEN_TRANSITION','FORBIDDEN_TRANSITION',403);
@@ -144,7 +143,7 @@ router.patch('/:id/status',
       return ok(res,{ data: doc });
     }catch(err){
       console.error('[offers-test:patchStatus]',err);
-      return fail(res,'UPDATE_FAILED',err.message||'UPDATE_FAILED',500);
+      return fail(res,'UPDATE_FAILED', err.message || 'UPDATE_FAILED', 500);
     }
   }
 );
