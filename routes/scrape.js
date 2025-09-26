@@ -17,14 +17,6 @@ function mongooseFallback() {
     return { create: async () => {} };
 }
 
-function detectVendor(url = '') {
-    if (/smartstore\.naver\.com/i.test(url)) return 'naver';
-    if (/coupang\.com/i.test(url)) return 'coupang';
-    if (/gmarket\.co\.kr/i.test(url)) return 'gmarket';
-    if (/11st\.co\.kr/i.test(url)) return '11st';
-    return 'unknown';
-}
-
 // YouTube URL에서 Video ID를 추출하는 유틸리티 함수
 function ytId(url = '') {
     // youtu.be/ID, youtube.com/watch?v=ID, /shorts/ID 모두 허용
@@ -32,6 +24,19 @@ function ytId(url = '') {
         /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([A-Za-z0-9_-]{6,})/
     );
     return m ? m[1] : '';
+}
+
+// YouTube/TikTok 등을 포함하도록 로직 확장
+function detectVendor(url = '') {
+    // [수정] 유튜브 탐지 로직 추가
+    if (/youtube\.com|youtu\.be/i.test(url)) return 'youtube';
+    if (/smartstore\.naver\.com/i.test(url)) return 'naver';
+    if (/coupang\.com/i.test(url)) return 'coupang';
+    if (/gmarket\.co\.kr/i.test(url)) return 'gmarket';
+    if (/11st\.co\.kr/i.test(url)) return '11st';
+    if (/instagram\.com/i.test(url)) return 'instagram'; // [추가] 인스타그램 탐지 로직
+    if (/tiktok\.com/i.test(url)) return 'tiktok'; // [추가] 틱톡 탐지 로직
+    return 'unknown';
 }
 
 router.get('/', async (req, res) => {
