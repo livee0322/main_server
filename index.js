@@ -79,6 +79,7 @@ app.use(`${BASE_PATH}/track`, require("./routes/track"))
 app.use(`${BASE_PATH}/clips`, require("./routes/clips"));
 app.use(`${BASE_PATH}/models`, require("./routes/models"));
 app.use(`${BASE_PATH}/studios`, require("./routes/studios"));
+app.use(`${BASE_PATH}/news`, require("./routes/news"));
 
 // 구버전 호환
 app.use("/api/auth", require("./routes/user"))
