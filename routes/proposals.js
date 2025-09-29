@@ -69,6 +69,69 @@ router.post(
         // 4. 성공 응답(201)을 보내기
         return res.ok({ message: "제안이 성공적으로 전송되었습니다." }, 201)
     })
-)
+);
+
+/**
+ * @route   GET /api/v1/proposals/sent
+ * @desc    현재 로그인된 브랜드 회원이 보낸 모든 제안 목록을 조회
+ * @access  Private (Brand)
+ */
+router.get(
+    "/sent",
+    auth, // 사용자가 로그인했는지 확인합니다.
+    requireRole("brand"), // 사용자의 역할이 'brand'인지 확인
+    asyncHandler(async (req, res) => {
+        // --- 1. 필터링 및 페이지네이션 준비 ---
+        const { status, page = 1, limit = 10 } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        // 기본적으로 현재 로그인한 사용자가 보낸(proposerId) 제안만 조회하도록 조건을 설정
+        const query = { proposerId: req.user.id };
+        // status 쿼리 파라미터가 있으면, 해당 상태의 제안만 필터링하도록 조건을 추가
+        if (status) {
+            query.status = status;
+        }
+
+        // --- 2. 데이터베이스 조회 ---
+        // 조건에 맞는 제안 목록과 전체 개수를 동시에 조회
+        const [proposals, totalItems] = await Promise.all([
+            Proposal.find(query)
+                .populate("targetShowhostId", "name") // 제안 받은 쇼호스트의 이름(name)을 가져오기 위해 User 모델을 참조
+                .sort({ createdAt: -1 }) // 최신순으로 정렬
+                .skip(skip)
+                .limit(parseInt(limit)),
+            Proposal.countDocuments(query),
+        ]);
+
+        // --- 3. 프론트엔드 응답 형식에 맞게 데이터 가공 ---
+        const items = proposals.map(p => {
+            // 날짜를 'YYYY. MM. DD' 형식으로 변환하는 헬퍼 함수
+            const formatDate = (date) => new Date(date).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\s/g, '').slice(0, -1);
+
+            return {
+                id: p._id,
+                recipient: {
+                    name: p.targetShowhostId?.name || "알 수 없음", // populate 된 쇼호스트의 이름을 사용
+                    portfolioId: p.targetPortfolioId,
+                },
+                content: p.content,
+                status: p.status,
+                sentAt: p.createdAt, // 보낸 시각
+                fee: p.fee,
+                isFeeNegotiable: p.isFeeNegotiable,
+                schedule: `${formatDate(p.shootingDate)}. ${p.shootingTime || ''} / ${p.location || ''}`, // 일정/장소 문자열 조합
+                replyDeadline: formatDate(p.replyDeadline), // 답장 기한
+            }
+        });
+
+        // --- 4. 최종 응답 반환 ---
+        return res.ok({
+            items,
+            currentPage: parseInt(page),
+            totalPages: Math.ceil(totalItems / parseInt(limit)),
+            totalItems,
+        });
+    })
+);
 
 module.exports = router
