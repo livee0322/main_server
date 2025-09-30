@@ -40,7 +40,14 @@ const proposalSchema = new Schema(
         // --- 제안 상태 (서버에서 관리) ---
         status: {
             type: String,
-            enum: ["pending", "accepted", "rejected", "canceled"], // 제안 상태: 대기중, 수락됨, 거절됨, 취소됨
+            enum: [
+                "pending",
+                "accepted",
+                "rejected",
+                "canceled",
+                "withdrawn",
+                "hold",
+            ], // 제안 상태: 대기, 수락, 거절, 취소, 철회, 보류
             default: "pending",
             index: true,
         },

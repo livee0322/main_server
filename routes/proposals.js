@@ -6,6 +6,7 @@ const Portfolio = require("../models/Portfolio")
 const auth = require("../src/middleware/auth")
 const requireRole = require("../src/middleware/requireRole")
 const asyncHandler = require("../src/middleware/asyncHandler")
+const User = require("../models/User")
 
 /**
  * @route   POST /api/v1/proposals
@@ -69,7 +70,7 @@ router.post(
         // 4. 성공 응답(201)을 보내기
         return res.ok({ message: "제안이 성공적으로 전송되었습니다." }, 201)
     })
-);
+)
 
 /**
  * @route   GET /api/v1/proposals/sent
@@ -82,14 +83,14 @@ router.get(
     requireRole("brand"), // 사용자의 역할이 'brand'인지 확인
     asyncHandler(async (req, res) => {
         // --- 1. 필터링 및 페이지네이션 준비 ---
-        const { status, page = 1, limit = 10 } = req.query;
-        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const { status, page = 1, limit = 10 } = req.query
+        const skip = (parseInt(page) - 1) * parseInt(limit)
 
         // 기본적으로 현재 로그인한 사용자가 보낸(proposerId) 제안만 조회하도록 조건을 설정
-        const query = { proposerId: req.user.id };
+        const query = { proposerId: req.user.id }
         // status 쿼리 파라미터가 있으면, 해당 상태의 제안만 필터링하도록 조건을 추가
         if (status) {
-            query.status = status;
+            query.status = status
         }
 
         // --- 2. 데이터베이스 조회 ---
@@ -101,12 +102,20 @@ router.get(
                 .skip(skip)
                 .limit(parseInt(limit)),
             Proposal.countDocuments(query),
-        ]);
+        ])
 
         // --- 3. 프론트엔드 응답 형식에 맞게 데이터 가공 ---
-        const items = proposals.map(p => {
+        const items = proposals.map((p) => {
             // 날짜를 'YYYY. MM. DD' 형식으로 변환하는 헬퍼 함수
-            const formatDate = (date) => new Date(date).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\s/g, '').slice(0, -1);
+            const formatDate = (date) =>
+                new Date(date)
+                    .toLocaleDateString("ko-KR", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                    })
+                    .replace(/\s/g, "")
+                    .slice(0, -1)
 
             return {
                 id: p._id,
@@ -119,10 +128,12 @@ router.get(
                 sentAt: p.createdAt, // 보낸 시각
                 fee: p.fee,
                 isFeeNegotiable: p.isFeeNegotiable,
-                schedule: `${formatDate(p.shootingDate)}. ${p.shootingTime || ''} / ${p.location || ''}`, // 일정/장소 문자열 조합
+                schedule: `${formatDate(p.shootingDate)}. ${
+                    p.shootingTime || ""
+                } / ${p.location || ""}`, // 일정/장소 문자열 조합
                 replyDeadline: formatDate(p.replyDeadline), // 답장 기한
             }
-        });
+        })
 
         // --- 4. 최종 응답 반환 ---
         return res.ok({
@@ -130,8 +141,119 @@ router.get(
             currentPage: parseInt(page),
             totalPages: Math.ceil(totalItems / parseInt(limit)),
             totalItems,
-        });
+        })
     })
-);
+)
+
+/**
+ * @route   GET /api/v1/proposals/received
+ * @desc    현재 로그인된 쇼호스트가 받은 모든 제안 목록을 조회
+ * @access  Private (Showhost)
+ */
+router.get(
+    "/received",
+    auth, // 사용자가 로그인했는지 확인
+    requireRole("showhost"), // 사용자의 역할이 'showhost'인지 확인
+    asyncHandler(async (req, res) => {
+        // --- 1. 필터링 및 페이지네이션 준비 ---
+        const { status, page = 1, limit = 10 } = req.query
+        const skip = (parseInt(page) - 1) * parseInt(limit)
+
+        // 기본적으로 현재 로그인한 쇼호스트가 받은(targetShowhostId) 제안만 조회하도록 조건을 설정
+        const query = { targetShowhostId: req.user.id }
+        if (status) {
+            query.status = status
+        }
+
+        // --- 2. 데이터베이스 조회 ---
+        const [proposals, totalItems] = await Promise.all([
+            Proposal.find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(parseInt(limit)),
+            Proposal.countDocuments(query),
+        ])
+
+        // --- 3. 프론트엔드 응답 형식에 맞게 데이터 가공 ---
+        const items = proposals.map((p) => {
+            const formatDate = (date) =>
+                new Date(date)
+                    .toLocaleDateString("ko-KR", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                    })
+                    .replace(/\s/g, "")
+                    .slice(0, -1)
+            return {
+                id: p._id,
+                sender: {
+                    // 제안 보낸 사람 정보
+                    brandName: p.brandName,
+                },
+                content: p.content,
+                status: p.status,
+                sentAt: p.createdAt,
+                fee: p.fee,
+                isFeeNegotiable: p.isFeeNegotiable,
+                schedule: `${formatDate(p.shootingDate)}. ${
+                    p.shootingTime || ""
+                } / ${p.location || ""}`,
+                replyDeadline: formatDate(p.replyDeadline),
+            }
+        })
+
+        // --- 4. 최종 응답 반환 ---
+        return res.ok({
+            items,
+            currentPage: parseInt(page),
+            totalPages: Math.ceil(totalItems / parseInt(limit)),
+            totalItems,
+        })
+    })
+)
+
+/**
+ * @route   PATCH /api/v1/proposals/:id/withdraw
+ * @desc    [신규] 브랜드가 보낸 제안을 철회
+ * @access  Private (Brand - 제안자 본인)
+ */
+router.patch(
+    "/:id/withdraw",
+    auth, // 사용자가 로그인했는지 확인
+    requireRole("brand"), // 사용자의 역할이 'brand'인지 확인
+    asyncHandler(async (req, res) => {
+        const { id } = req.params
+        if (!mongoose.isValidObjectId(id)) {
+            return res.fail("INVALID_ID", 400)
+        }
+
+        // 1. 제안을 찾기
+        const proposal = await Proposal.findById(id)
+        if (!proposal) {
+            return res.fail("NOT_FOUND", 404)
+        }
+
+        // 2. 제안을 보낸 사람(proposerId)이 현재 로그인한 사용자와 일치하는지 확인
+        if (String(proposal.proposerId) !== req.user.id) {
+            return res.fail("FORBIDDEN", 403, {
+                userMessage: "제안을 철회할 권한이 없습니다.",
+            })
+        }
+
+        // 3. 제안의 상태가 'pending'(대기중)일 때만 철회가 가능
+        if (proposal.status !== "pending") {
+            return res.fail("BAD_REQUEST", 400, {
+                userMessage: "대기중인 제안만 철회할 수 있습니다.",
+            })
+        }
+
+        // 4. 제안 상태를 'withdrawn'(철회됨)으로 변경하고 저장
+        proposal.status = "withdrawn"
+        await proposal.save()
+
+        return res.ok({ message: "제안이 성공적으로 철회되었습니다." })
+    })
+)
 
 module.exports = router
