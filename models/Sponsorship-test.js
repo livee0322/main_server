@@ -1,43 +1,49 @@
-// models/Sponsorship-test.js — v1.0.0
 'use strict';
-const { Schema, model } = require('mongoose');
+const { Schema, model, Types } = require('mongoose');
 
 const ProductSchema = new Schema({
-  name:  { type:String, trim:true },
-  url:   { type:String, trim:true },
-  thumb: { type:String, trim:true },
-  price: { type:Number, min:0 }
-}, { _id:false });
+  name:     { type: String, trim: true },
+  url:      { type: String, trim: true },
+  imageUrl: { type: String, trim: true }
+},{ _id:false });
 
 const SponsorshipSchema = new Schema({
-  // 유형/상태
-  type:   { type:String, enum:['delivery_keep','delivery_return','experience_review'], required:true, index:true },
-  status: { type:String, enum:['open','in_progress','closed','completed'], default:'open', index:true },
+  // 고정 타입 (프런트가 보내는 값과 동일)
+  type:   { type: String, default: 'sponsorship', index: true },
 
-  // 기본
-  title:      { type:String, required:true, trim:true },
-  brandName:  { type:String, required:true, trim:true },
-  descriptionHTML: { type:String, default:'' },
+  status: { type: String, enum: ['draft','published','closed'], default: 'published', index: true },
 
-  // 보상
-  fee:           { type:Number, min:0 },
-  feeNegotiable: { type:Boolean, default:false },
-  productOnly:   { type:Boolean, default:false },
+  // 기본 정보
+  title:      { type: String, trim: true },
+  brandName:  { type: String, trim: true },
 
-  // 마감
-  closeAt: { type:Date, index:true },
+  // 유형: 배송형/반납형/체험후기형 (+ 기타)
+  sponsorType: { type: String, enum: ['shipping','return','review','other'], default: 'shipping' },
 
-  // 상품
-  product: { type: ProductSchema, default: undefined },
+  // 비용
+  fee:           { type: Number, min: 0 },
+  feeNegotiable: { type: Boolean, default: false },
 
-  // 소유
-  createdBy: { type: Schema.Types.ObjectId, ref:'User', required:true, index:true }
-}, { timestamps:true, collection:'sponsorships' });
+  // 설명/가이드(HTML 허용)
+  descriptionHTML: { type: String },
 
-SponsorshipSchema.index({ createdAt:-1 });
-SponsorshipSchema.set('toJSON', {
-  virtuals:true, versionKey:false,
-  transform(_d,ret){ ret.id = String(ret._id); delete ret._id; }
+  // 썸네일
+  coverImageUrl: { type: String, trim: true },
+  thumbnailUrl:  { type: String, trim: true },
+
+  // 상품 블록
+  product: { type: ProductSchema, default: {} },
+
+  // 소유자
+  createdBy: { type: Types.ObjectId, ref: 'User', required: true, index: true }
+},{
+  timestamps: true,
+  collection: 'sponsorships'
 });
 
-module.exports = model('Sponsorship-test', SponsorshipSchema);
+SponsorshipSchema.set('toJSON', {
+  virtuals: true, versionKey: false,
+  transform(_doc, ret){ ret.id = ret._id.toString(); delete ret._id; }
+});
+
+module.exports = model('SponsorshipTest', SponsorshipSchema);
