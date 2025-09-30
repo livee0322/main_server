@@ -95,6 +95,7 @@ app.use(`${BASE_PATH}/shorts-test`, require("./routes/shorts-test"))
 app.use(`${BASE_PATH}/brand-test`, require("./routes/brand-test"))
 app.use(`${BASE_PATH}/model-test`, require("./routes/model-test"));
 app.use(`${BASE_PATH}/offers-test`, require('./routes/offers-test'));
+app.use('/api/v1/sponsorship-test', require('./routes/sponsorship-test'));
 
 ;(async () => {
   try {
