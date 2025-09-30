@@ -1,107 +1,148 @@
-// routes/sponsorship-test.js — v1.0.0 (create/list/read/update/status)
 'use strict';
 const router = require('express').Router();
-const { body, query, param, validationResult } = require('express-validator');
+const { query, param, validationResult } = require('express-validator');
 const mongoose = require('mongoose');
 
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
-
 const Sponsorship = require('../models/Sponsorship-test');
 
-const ok = (res, payload, status=200)=>res.status(status).json(payload);
-const fail = (res, code, message, status=400, extra={}) => res.status(status).json({ ok:false, code, message, ...extra });
+// 공통 응답 헬퍼
+const ok   = (res, payload, status=200)=>res.status(status).json(payload);
+const fail = (res, code, message, status=400, extra={}) =>
+  res.status(status).json({ ok:false, code, message, ...extra });
 
-// sanitize (best-effort)
-let sanitize = (s='')=>String(s||'');
-try{ const sh=require('sanitize-html');
-  sanitize=(html='')=>sh(html||'',{allowedTags:sh.defaults.allowedTags.concat(['img','h1','h2','u','span','figure','figcaption']),
-  allowedAttributes:{'*':['style','class','id','src','href','alt','title']},allowedSchemes:['http','https','data','mailto','tel']});
+// 안전한 sanitize(옵션)
+let sanitize = (html='')=>String(html||'');
+try{
+  const sh = require('sanitize-html');
+  sanitize = (html='') => sh(html||'', {
+    allowedTags: sh.defaults.allowedTags.concat(['img','figure','figcaption','span','u']),
+    allowedAttributes: { '*':['class','style','src','href','alt','title'] },
+    allowedSchemes: ['http','https','data','mailto','tel']
+  });
 }catch(_){}
 
-/* helpers */
-const parseFee = (fee, nego, prodOnly) => {
-  if (prodOnly) return { fee:null, feeNegotiable:false, productOnly:true };
-  if (nego) return { fee:null, feeNegotiable:true, productOnly:false };
-  const n = fee==null ? null : Number(String(fee).replace(/[^\d.-]/g,''));
-  return { fee: Number.isFinite(n)?n:null, feeNegotiable:false, productOnly:false };
+// 유틸
+const toNumber = (v)=> {
+  if (v==null || v==='') return undefined;
+  const n = Number(String(v).replace(/[^\d.-]/g,''));
+  return Number.isFinite(n) ? n : undefined;
 };
+const truthy = v => (v===true || v==='true' || v==='1' || v===1);
 
-/* DTO */
-const toDTO = (o) => {
-  const p = o.product || {};
+// 유형 매핑 (한글 → 코드)
+function mapType(v){
+  const s = String(v||'').trim();
+  if (/반납/.test(s) || /대여/.test(s)) return 'return';
+  if (/후기/.test(s)) return 'review';
+  if (/배송|증정/.test(s)) return 'shipping';
+  if (['shipping','return','review','other'].includes(s)) return s;
+  return 'shipping';
+}
+
+// DTO
+function toDTO(doc){
+  const o = typeof doc.toObject==='function' ? doc.toObject() : doc;
   return {
-    id: String(o._id || o.id),
-    type: o.type, status: o.status,
-    title: o.title, brandName: o.brandName,
+    id: String(o._id || o.id || ''),
+    type: 'sponsorship',
+    status: o.status || 'published',
+    title: o.title || '',
+    brandName: o.brandName || '',
+    sponsorType: o.sponsorType || 'shipping',
+    fee: o.fee ?? null,
+    feeNegotiable: !!o.feeNegotiable,
     descriptionHTML: o.descriptionHTML || '',
-    fee: o.fee ?? null, feeNegotiable: !!o.feeNegotiable, productOnly: !!o.productOnly,
-    closeAt: o.closeAt || null,
-    product: { name:p.name||'', url:p.url||'', thumb:p.thumb||'', price:p.price??null },
+    coverImageUrl: o.coverImageUrl || '',
+    thumbnailUrl: o.thumbnailUrl || o.coverImageUrl || '',
+    product: {
+      name: (o.product && o.product.name) || '',
+      url: (o.product && o.product.url) || '',
+      imageUrl: (o.product && o.product.imageUrl) || (o.coverImageUrl || '')
+    },
     createdAt: o.createdAt, updatedAt: o.updatedAt
   };
-};
+}
 
-/* Create (brand/admin only) */
+/* ───────────────── Create (brand/admin 전용, 검증 최소화) ───────────────── */
+// “테스트 버전: 필수/형식 최소화” — 422 방지
 router.post('/',
   auth, requireRole('brand','admin'),
-  body('title').isString().isLength({min:1}),
-  body('brandName').isString().isLength({min:1}),
-  body('type').isIn(['delivery_keep','delivery_return','experience_review']),
-  body('closeAt').optional().isISO8601(),
-  async (req,res)=>{
-    const v = validationResult(req);
-    if(!v.isEmpty()) return fail(res,'VALIDATION_FAILED','VALIDATION_FAILED',422,{errors:v.array()});
+  async (req, res) => {
     try{
-      const feeParse = parseFee(req.body.fee, req.body.feeNegotiable, req.body.productOnly);
-      const payload = {
-        type: req.body.type,
-        status: 'open',
-        title: String(req.body.title).trim(),
-        brandName: String(req.body.brandName).trim(),
-        descriptionHTML: sanitize(req.body.descriptionHTML||''),
-        ...feeParse,
-        closeAt: req.body.closeAt ? new Date(req.body.closeAt) : undefined,
-        product: req.body.product || undefined,
-        createdBy: req.user.id
+      // payload 흡수형: 프런트/타 시스템 키 모두 수용
+      const body = req.body || {};
+
+      const fee = toNumber(body.fee ?? body.pay);
+      const feeNegotiable = truthy(body.feeNegotiable ?? body.payNegotiable);
+
+      const sponsorType = mapType(body.sponsorType ?? body.typeOfSponsorship ?? body.type);
+
+      const product = {
+        name: (body.product?.name ?? body.productName) || '',
+        url:  (body.product?.url  ?? body.productUrl)  || '',
+        imageUrl: (body.product?.imageUrl ?? body.thumbnailUrl ?? body.coverImageUrl ?? body.thumb) || ''
       };
+
+      const payload = {
+        type: 'sponsorship',
+        status: body.status || 'published',
+        createdBy: req.user.id,
+
+        title: (body.title || '').trim(),
+        brandName: (body.brandName || body.brand || '').trim(),
+
+        sponsorType,
+        fee, feeNegotiable,
+
+        descriptionHTML: body.descriptionHTML ? sanitize(body.descriptionHTML) : '',
+
+        coverImageUrl: body.coverImageUrl || product.imageUrl || '',
+        thumbnailUrl:  body.thumbnailUrl  || body.coverImageUrl || product.imageUrl || '',
+
+        product
+      };
+
       const created = await Sponsorship.create(payload);
       return ok(res, { data: toDTO(created) }, 201);
     }catch(err){
       console.error('[sponsorship:create]', err);
-      return fail(res,'CREATE_FAILED', err.message||'CREATE_FAILED', 500);
+      return fail(res, 'CREATE_FAILED', err.message || 'CREATE_FAILED', 500);
     }
   }
 );
 
-/* List */
+/* ───────────────── List ───────────────── */
+// GET /sponsorship-test?status=published&page=1&limit=20
 router.get('/',
-  query('type').optional().isIn(['delivery_keep','delivery_return','experience_review']),
-  query('status').optional().isIn(['open','in_progress','closed','completed']),
+  query('status').optional().isIn(['draft','published','closed']),
   query('page').optional().isInt({min:1}).toInt(),
   query('limit').optional().isInt({min:1,max:50}).toInt(),
   async (req,res)=>{
     try{
-      const page = req.query.page || 1;
+      const page  = req.query.page  || 1;
       const limit = req.query.limit || 20;
-      const q = {};
-      if (req.query.type) q.type = req.query.type;
+      const q = { type:'sponsorship' };
       if (req.query.status) q.status = req.query.status;
 
-      const [docs,total] = await Promise.all([
-        Sponsorship.find(q).sort({ createdAt:-1 }).skip((page-1)*limit).limit(limit),
+      const [docs, total] = await Promise.all([
+        Sponsorship.find(q).sort({ createdAt:-1 }).skip((page-1)*limit).limit(limit).lean(),
         Sponsorship.countDocuments(q)
       ]);
 
-      return ok(res, { items: docs.map(toDTO), page, limit, total, totalPages: Math.ceil(total/limit) });
+      return ok(res, {
+        items: docs.map(toDTO),
+        page, limit, total, totalPages: Math.ceil(total/limit)
+      });
     }catch(err){
       console.error('[sponsorship:list]', err);
-      return fail(res,'LIST_FAILED', err.message||'LIST_FAILED', 500);
+      return fail(res, 'LIST_FAILED', err.message || 'LIST_FAILED', 500);
     }
   }
 );
 
-/* Read */
+/* ───────────────── Read ───────────────── */
 router.get('/:id',
   param('id').isString(),
   async (req,res)=>{
@@ -109,59 +150,11 @@ router.get('/:id',
     if(!mongoose.isValidObjectId(id)) return fail(res,'INVALID_ID','INVALID_ID',400);
     try{
       const doc = await Sponsorship.findById(id);
-      if(!doc) return fail(res,'NOT_FOUND','NOT_FOUND',404);
+      if (!doc) return fail(res,'NOT_FOUND','NOT_FOUND',404);
       return ok(res, { data: toDTO(doc) });
     }catch(err){
       console.error('[sponsorship:read]', err);
-      return fail(res,'READ_FAILED', err.message||'READ_FAILED', 500);
-    }
-  }
-);
-
-/* Update (owner) */
-router.put('/:id',
-  auth, requireRole('brand','admin'),
-  param('id').isString(),
-  async (req,res)=>{
-    const { id } = req.params;
-    if(!mongoose.isValidObjectId(id)) return fail(res,'INVALID_ID','INVALID_ID',400);
-    try{
-      const $set = { ...req.body };
-      if ($set.descriptionHTML) $set.descriptionHTML = sanitize($set.descriptionHTML);
-      if ('fee' in $set || 'feeNegotiable' in $set || 'productOnly' in $set) {
-        Object.assign($set, parseFee($set.fee, $set.feeNegotiable, $set.productOnly));
-      }
-      const updated = await Sponsorship.findOneAndUpdate({ _id:id, createdBy:req.user.id }, { $set }, { new:true });
-      if(!updated) return fail(res,'FORBIDDEN','FORBIDDEN',403);
-      return ok(res, { data: toDTO(updated) });
-    }catch(err){
-      console.error('[sponsorship:update]', err);
-      return fail(res,'UPDATE_FAILED', err.message||'UPDATE_FAILED', 500);
-    }
-  }
-);
-
-/* Status change (owner) */
-router.patch('/:id/status',
-  auth, requireRole('brand','admin'),
-  param('id').isString(),
-  body('status').isIn(['open','in_progress','closed','completed']),
-  async (req,res)=>{
-    const v = validationResult(req);
-    if(!v.isEmpty()) return fail(res,'VALIDATION_FAILED','VALIDATION_FAILED',422,{errors:v.array()});
-    const { id } = req.params;
-    if(!mongoose.isValidObjectId(id)) return fail(res,'INVALID_ID','INVALID_ID',400);
-    try{
-      const doc = await Sponsorship.findOneAndUpdate(
-        { _id:id, createdBy:req.user.id },
-        { $set:{ status:req.body.status } },
-        { new:true }
-      );
-      if(!doc) return fail(res,'FORBIDDEN','FORBIDDEN',403);
-      return ok(res, { data: toDTO(doc) });
-    }catch(err){
-      console.error('[sponsorship:status]', err);
-      return fail(res,'UPDATE_FAILED', err.message||'UPDATE_FAILED', 500);
+      return fail(res,'READ_FAILED', err.message || 'READ_FAILED', 500);
     }
   }
 );
