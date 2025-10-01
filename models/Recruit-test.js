@@ -1,4 +1,4 @@
-// models/Recruit-test.js — v1.0.0
+// models/Recruit-test.js — v1.1.0 (recruit-test 단일 모델, 세로커버/라이브링크 포함)
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
@@ -42,8 +42,16 @@ const RecruitSchema = new Schema({
   brandName: String,
   category: String,
 
+  // 대표 이미지(가로 16:9) / 썸네일
   coverImageUrl: String,
-  thumbnailUrl: String, // Cloudinary 변환 결과 저장
+  thumbnailUrl: String,        // Cloudinary 변환 결과 저장
+
+  // 세로 커버(홈 “지금 뜨는” 카드에서 사용, 1:2 비율 권장)
+  verticalCoverUrl: String,
+
+  // 쇼핑라이브/외부 페이지 링크(선택)
+  liveLink: String,
+
   descriptionHTML: String,
 
   publishAt: Date,
@@ -84,4 +92,4 @@ const RecruitSchema = new Schema({
 RecruitSchema.index({ createdAt:-1 });
 RecruitSchema.index({ type:1, status:1 });
 
-module.exports = mongoose.model('RecruitTest', RecruitSchema, 'recruits-dev');
+module.exports = mongoose.model('RecruitTest', RecruitSchema, 'recruits-dev'); // 단일 모델 사용
