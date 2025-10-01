@@ -1,4 +1,4 @@
-// models/Campaign.js
+// [수정] 파일 상단에 mongoose와 Schema를 명시적으로 가져오도록 수정
 const mongoose = require("mongoose")
 const { Schema } = mongoose
 
@@ -52,23 +52,38 @@ const CampaignSchema = new Schema(
             default: "draft",
             index: true,
         },
-
+        // [추가] 내부 관리용 제목 필드 추가
+        internalTitle: { type: String, trim: true },
+        // [추가] '쇼호스트 모집' 등 제목 앞에 붙는 말머리 필드 추가
+        prefix: { type: String, trim: true },
         title: { type: String, required: true },
         brand: String,
         category: String,
 
         coverImageUrl: String,
         thumbnailUrl: String, // derived from coverImageUrl (Cloudinary transform)
+        // [추가] 상품 공고용 세로(9:16) 커버 이미지 URL 필드 추가
+        liveVerticalCoverUrl: { type: String, trim: true },
         descriptionHTML: String,
 
+        // [기존] liveDate, liveTime을 사용하고 있으나, 프론트 요청에 따라 startTime, endTime 추가
         liveDate: Date,
         liveTime: String,
+        // [추가] 시작 시간과 종료 시간 필드 추가
+        startTime: { type: String, trim: true },
+        endTime: { type: String, trim: true },
 
         publishAt: Date,
-        closeAt: Date,
+        closeAt: Date, // 프론트의 'applyDeadline'에 해당
+
+        // [추가] 상품 공고 타입 전용 필드들
+        liveStreamUrl: { type: String, trim: true }, // 실제 방송 송출 링크
+        productThumbnailUrl: { type: String, trim: true }, // 상품 썸네일
+        productName: { type: String, trim: true }, // 상품명
+        productUrl: { type: String, trim: true }, // 상품 구매 링크
 
         // 상품 정보 (이제 'recruit' 타입도 상품을 가질 수 있음)
-        products: [ProductItemSchema],
+        products: [ProductItemSchema], // 'product' 타입에서는 더 이상 사용되지 않음
 
         location: String,
         shootDate: Date,
@@ -84,6 +99,8 @@ const CampaignSchema = new Schema(
                 enum: ["product", "host", "both"],
                 default: "product",
             },
+            // [추가] 총 촬영 진행 시간 필드 추가
+            durationInHours: { type: Number },
             location: String,
             requirements: String, // Recruit 모델의 description과 호환
             preferred: String,

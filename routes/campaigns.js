@@ -1,17 +1,17 @@
 const router = require("express").Router()
-const { body, query, validationResult } = require("express-validator")
-const sanitizeHtml = require("sanitize-html")
-const mongoose = require("mongoose")
-const Campaign = require("../models/Campaign")
-const auth = require("../src/middleware/auth")
-const optionalAuth = require("../src/middleware/optionalAuth")
-const requireRole = require("../src/middleware/requireRole")
-const { toThumb, toDTO } = require("../src/utils/common")
-const Application = require("../models/Application")
+import { body, query, validationResult } from "express-validator"
+import sanitizeHtml, { defaults } from "sanitize-html"
+import { isValidObjectId } from "mongoose"
+import { aggregate, create, find, countDocuments, findById, findOneAndUpdate, findOneAndDelete } from "../models/Campaign"
+import auth from "../src/middleware/auth"
+import optionalAuth from "../src/middleware/optionalAuth"
+import requireRole from "../src/middleware/requireRole"
+import { toThumb, toDTO } from "../src/utils/common"
+import { find as _find, findOne } from "../models/Application"
 
 const sanitize = (html) =>
     sanitizeHtml(html || "", {
-        allowedTags: sanitizeHtml.defaults.allowedTags.concat([
+        allowedTags: defaults.allowedTags.concat([
             "img",
             "h1",
             "h2",
@@ -38,7 +38,7 @@ router.get("/meta", async (req, res) => {
         "디지털",
     ]
     const recruitCats = ["뷰티", "가전", "음식", "패션", "리빙", "일반"]
-    const brands = await Campaign.aggregate([
+    const brands = await aggregate([
         { $match: { brand: { $exists: true, $ne: "" } } },
         { $group: { _id: "$brand", count: { $sum: 1 } } },
         { $project: { _id: 0, name: "$_id", count: 1 } },
@@ -79,7 +79,7 @@ router.post(
         if (payload.descriptionHTML)
             payload.descriptionHTML = sanitize(payload.descriptionHTML)
 
-        const created = await Campaign.create(payload)
+        const created = await create(payload)
         return res.ok({ data: toDTO(created) }, 201)
     }
 )
@@ -110,15 +110,15 @@ router.get('/',
 
         // 2. 데이터베이스 조회 (기존과 동일)
         const [docs, totalItems] = await Promise.all([
-            Campaign.find(q).sort(sortOption).skip((page - 1) * limit).limit(limit),
-            Campaign.countDocuments(q),
+            find(q).sort(sortOption).skip((page - 1) * limit).limit(limit),
+            countDocuments(q),
         ]);
 
         // ▼▼▼▼▼ [핵심] 디버깅을 위한 로그 추가 ▼▼▼▼▼
         let appliedCampaignIds = new Set();
         if (req.user) {
             console.log(`[DEBUG] User found: ${req.user.id}`); // 로그 1: 현재 사용자 ID
-            const userApplications = await Application.find({ userId: req.user.id }).select('campaignId');
+            const userApplications = await _find({ userId: req.user.id }).select('campaignId');
 
             console.log(`[DEBUG] Found ${userApplications.length} applications for this user.`); // 로그 2: 사용자의 총 지원서 수
 
@@ -156,7 +156,7 @@ router.get('/',
 
 /* Mine */
 router.get("/mine", auth, requireRole("brand", "admin"), async (req, res) => {
-    const docs = await Campaign.find({ createdBy: req.user.id }).sort({
+    const docs = await find({ createdBy: req.user.id }).sort({
         createdAt: -1,
     })
     return res.ok({ items: docs.map(toDTO) })
@@ -165,10 +165,10 @@ router.get("/mine", auth, requireRole("brand", "admin"), async (req, res) => {
 /* Read */
 router.get("/:id", optionalAuth, async (req, res) => {
     const { id } = req.params
-    if (!mongoose.isValidObjectId(id)) {
+    if (!isValidObjectId(id)) {
         return res.fail("INVALID_ID", 400)
     }
-    const c = await Campaign.findById(id)
+    const c = await findById(id)
     if (!c) return res.fail("NOT_FOUND", 404)
 
     // req.user가 있을 때만 isOwner를 판별
@@ -182,7 +182,7 @@ router.get("/:id", optionalAuth, async (req, res) => {
     let isApplied = false
     if (req.user) {
         // 로그인한 경우에만 실행
-        const application = await Application.findOne({
+        const application = await findOne({
             userId: req.user.id,
             campaignId: c._id,
         })
@@ -198,11 +198,11 @@ router.get("/:id", optionalAuth, async (req, res) => {
 /* Update */
 router.put("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
     const { id } = req.params
-    if (!mongoose.isValidObjectId(id)) return res.fail("INVALID_ID", 400)
+    if (!isValidObjectId(id)) return res.fail("INVALID_ID", 400)
 
     // '게시' 상태로 변경 시 이미지 URL 필수 검증
     if (req.body.status === "published") {
-        const campaign = await Campaign.findById(id)
+        const campaign = await findById(id)
         // DB에 저장된 이미지 URL도 없고, 새로 업데이트되는 값도 없을 경우 에러 처리
         if (!campaign.coverImageUrl && !req.body.coverImageUrl) {
             return res.fail("COVER_IMAGE_REQUIRED", 400)
@@ -215,7 +215,7 @@ router.put("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
     if ($set.descriptionHTML)
         $set.descriptionHTML = sanitize($set.descriptionHTML)
 
-    const updated = await Campaign.findOneAndUpdate(
+    const updated = await findOneAndUpdate(
         { _id: id, createdBy: req.user.id },
         { $set },
         { new: true }
@@ -227,9 +227,9 @@ router.put("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
 /* Delete */
 router.delete("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
     const { id } = req.params
-    if (!mongoose.isValidObjectId(id)) return res.fail("INVALID_ID", 400)
+    if (!isValidObjectId(id)) return res.fail("INVALID_ID", 400)
 
-    const removed = await Campaign.findOneAndDelete({
+    const removed = await findOneAndDelete({
         _id: id,
         createdBy: req.user.id,
     })
@@ -237,4 +237,4 @@ router.delete("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
     return res.ok({ message: "삭제 완료" })
 })
 
-module.exports = router
+export default router
