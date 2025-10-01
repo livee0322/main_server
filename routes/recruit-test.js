@@ -1,9 +1,9 @@
-// routes/recruit-test.js — v3.0.0 (RecruitTest 전용 + products/세로커버 호환)
+// routes/recruit-test.js — v3.1.0 (recruit-test 전용, 세로커버/상품칩 DTO 포함)
 'use strict';
 const router = require('express').Router();
 const { body, query, validationResult } = require('express-validator');
 const mongoose = require('mongoose');
-const Recruit = require('../models/Recruit-test');   // ★ 전용 모델
+const Recruit = require('../models/Recruit-test');   // ★ 단일 모델
 const auth = require('../src/middleware/auth');
 const requireRole = require('../src/middleware/requireRole');
 
@@ -44,14 +44,17 @@ const toThumb169=url=>{ try{
   return url.slice(0,i+8) + 'c_fill,g_auto,w_640,h_360,f_auto,q_auto/' + url.slice(i+8);
 }catch{ return url; }};
 
-/* DTO */
+/* ===== DTO ===== */
 function toDTO(doc){
   const o=typeof doc.toObject==='function'?doc.toObject():doc;
   const brandName=pickBrand(o);
-  const coverImageUrl=o.coverImageUrl||'';
-  const thumbnailUrl=o.thumbnailUrl||(coverImageUrl?toThumb169(coverImageUrl):'');
 
-  // products는 안전한 필드만 노출
+  const coverImageUrl   = o.coverImageUrl || '';
+  const thumbnailUrl    = o.thumbnailUrl || (coverImageUrl ? toThumb169(coverImageUrl) : '');
+  const verticalCoverUrl= o.verticalCoverUrl || '';           // ← 세로 커버 전달
+  const liveLink        = o.liveLink || '';                   // ← 라이브 링크(선택)
+
+  // products는 안전한 필드만 노출 + 리스트 보조 필드(firstProduct*)
   const products=(Array.isArray(o.products)?o.products:[]).map(p=>({
     id:String(p._id||''),
     title:p.title||'',
@@ -59,6 +62,7 @@ function toDTO(doc){
     imageUrl:p.imageUrl||'',
     marketplace:p.marketplace||'etc'
   }));
+  const firstProduct = products[0] || {};
 
   const pay = (o.fee!=null)?o.fee : (o.recruit?.pay ?? null);
   const payNegotiable = (o.feeNegotiable!=null)?o.feeNegotiable : !!o.recruit?.payNegotiable;
@@ -69,11 +73,26 @@ function toDTO(doc){
     status:o.status||'draft',
     title:o.title||'',
     brandName,
-    coverImageUrl, thumbnailUrl,
+
+    // 이미지
+    coverImageUrl,
+    thumbnailUrl,
+    verticalCoverUrl,
+
+    // 기본
     category:o.category||'',
     closeAt:o.closeAt||null,
     descriptionHTML:o.descriptionHTML||'',
+
+    // 상품(리스트 카드용 최소정보 포함)
     products,
+    firstProductTitle: firstProduct.title || '',
+    firstProductImage: firstProduct.imageUrl || '',
+
+    // 쇼핑라이브 링크(선택)
+    liveLink,
+
+    // 상세/요약 공통 필드
     recruit:{
       brandName,
       location: o.recruit?.location || o.location || '',
