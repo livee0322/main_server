@@ -1,35 +1,17 @@
 const router = require("express").Router()
-// [추가] 요청 데이터 유효성 검사를 위한 express-validator 모듈
 const { body, query, validationResult } = require("express-validator")
 const sanitizeHtml = require("sanitize-html")
 const { isValidObjectId } = require("mongoose")
 
-// [수정] Campaign 모델의 CRUD 함수들을 가져옵니다.
-const {
-    aggregate,
-    create,
-    find,
-    countDocuments,
-    findById,
-    findOneAndUpdate,
-    findOneAndDelete,
-} = require("../models/Campaign")
+// [수정] Campaign 모델 전체를 가져오도록 변경
+const Campaign = require("../models/Campaign")
 
-// [주석] 인증 및 권한 처리를 위한 미들웨어
 const auth = require("../src/middleware/auth")
 const optionalAuth = require("../src/middleware/optionalAuth")
 const requireRole = require("../src/middleware/requireRole")
-
-// [주석] 공통 유틸리티 함수 (썸네일 생성, 데이터 형식 변환 등)
 const { toThumb, toDTO } = require("../src/utils/common")
 const { find: _find, findOne } = require("../models/Application")
 
-/**
- * @function sanitize
- * @desc   HTML 문자열에서 악의적인 스크립트를 제거하여 보안을 강화하는 함수입니다.
- * @param  {string} html - 처리할 HTML 문자열
- * @returns {string} - 안전하게 처리된 HTML 문자열
- */
 const sanitize = (html) =>
     sanitizeHtml(html || "", {
         allowedTags: sanitizeHtml.defaults.allowedTags.concat([
@@ -65,7 +47,7 @@ router.get("/meta", async (req, res) => {
     ]
     const recruitCats = ["뷰티", "가전", "음식", "패션", "리빙", "일반"]
     // [주석] DB에서 기존에 등록된 브랜드 목록을 집계하여 상위 50개를 가져옵니다.
-    const brands = await aggregate([
+    const brands = await Campaign.aggregate([
         { $match: { brandName: { $exists: true, $ne: "" } } },
         { $group: { _id: "$brandName", count: { $sum: 1 } } },
         { $project: { _id: 0, name: "$_id", count: 1 } },
@@ -179,7 +161,7 @@ router.post(
             payload.thumbnailUrl = toThumb(payload.coverImageUrl)
         }
 
-        const created = await create(payload)
+        const created = await Campaign.create(payload)
         return res.ok({ data: toDTO(created) }, 201)
     }
 )
@@ -220,11 +202,11 @@ router.get("/", optionalAuth, async (req, res) => {
 
     // 데이터베이스에서 공고 목록과 전체 개수를 동시에 조회
     const [docs, totalItems] = await Promise.all([
-        find(q)
+        Campaign.find(q)
             .sort(sortOption)
             .skip((page - 1) * limit)
             .limit(limit),
-        countDocuments(q),
+        Campaign.countDocuments(q),
     ])
 
     // 로그인한 사용자의 경우, 각 공고에 대한 지원 여부를 확인
@@ -261,7 +243,7 @@ router.get("/", optionalAuth, async (req, res) => {
  * @access  Private (brand, admin 역할만 가능)
  */
 router.get("/mine", auth, requireRole("brand", "admin"), async (req, res) => {
-    const docs = await find({ createdBy: req.user.id }).sort({
+    const docs = await Campaign.find({ createdBy: req.user.id }).sort({
         createdAt: -1,
     })
     return res.ok({ items: docs.map(toDTO) })
@@ -278,7 +260,7 @@ router.get("/:id", optionalAuth, async (req, res) => {
     if (!isValidObjectId(id)) {
         return res.fail("INVALID_ID", 400)
     }
-    const c = await findById(id)
+    const c = await Campaign.findById(id)
     if (!c) return res.fail("NOT_FOUND", 404)
 
     // 소유자 여부 판별
@@ -315,7 +297,7 @@ router.put("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
 
     // '게시' 상태로 변경 시 커버 이미지 필수 여부 검증
     if (req.body.status === "published") {
-        const campaign = await findById(id)
+        const campaign = await Campaign.findById(id)
         if (!campaign.coverImageUrl && !req.body.coverImageUrl) {
             return res.fail("COVER_IMAGE_REQUIRED", 400)
         }
@@ -332,7 +314,7 @@ router.put("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
     }
 
     // DB에서 해당 ID와 작성자가 일치하는 문서를 찾아 업데이트
-    const updated = await findOneAndUpdate(
+    const updated = await Campaign.findOneAndUpdate(
         { _id: id, createdBy: req.user.id },
         { $set },
         { new: true } // 업데이트된 결과를 반환하도록 설정
@@ -351,7 +333,7 @@ router.delete("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
     if (!isValidObjectId(id)) return res.fail("INVALID_ID", 400)
 
     // DB에서 해당 ID와 작성자가 일치하는 문서를 찾아 삭제
-    const removed = await findOneAndDelete({
+    const removed = await Campaign.findOneAndDelete({
         _id: id,
         createdBy: req.user.id,
     })
