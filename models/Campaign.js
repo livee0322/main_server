@@ -41,11 +41,10 @@ const QuestionSchema = new Schema(
 const CampaignSchema = new Schema(
     {
         // --- 기본 정보 ---
-        status: {
-            // 공고 상태
-            type: String,
-            enum: ["draft", "scheduled", "published", "closed"],
-            default: "draft",
+        isPublic: {
+            // 공고 공개 여부
+            type: Boolean,
+            default: true, // 생성 시 기본값은 '공개'
             index: true,
         },
         brandName: { type: String, required: true, trim: true }, // 브랜드명 (필수)

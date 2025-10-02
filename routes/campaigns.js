@@ -76,6 +76,9 @@ router.post(
     requireRole("brand", "admin"), // 2. 'brand' 또는 'admin' 역할인지 확인
     [
         // 3. 요청 데이터의 유효성을 검사하는 규칙 정의
+        body("isPublic", "공개 여부는 boolean 값이어야 합니다.")
+            .optional()
+            .isBoolean(),
         body("brandName", "브랜드명을 입력해주세요.").notEmpty().isString(),
         body("prefix", "올바른 말머리를 선택해주세요.")
             .optional()
@@ -133,6 +136,8 @@ router.post(
             status,
         } = req.body
 
+        const { isPublic, ...restOfBody } = req.body
+
         // DB에 저장할 최종 데이터 객체(payload)를 구성
         const payload = {
             brandName,
@@ -149,7 +154,7 @@ router.post(
             fee,
             feeNegotiable,
             coverImageUrl,
-            status,
+            isPublic: isPublic === false ? false : true, // 명시적으로 false가 아니면 모두 true(공개)로 처리
             createdBy: req.user.id,
         }
 
@@ -181,7 +186,10 @@ router.get("/", optionalAuth, async (req, res) => {
     )
 
     // 기본 쿼리 조건: '게시(published)' 상태인 공고만 조회
-    const q = { status: "published" }
+    const q = {
+        isPublic: true, // 1. 공개 상태인 공고만 조회
+        closeAt: { $gte: new Date() }, // 2. 마감일이 아직 지나지 않은 공고만 조회
+    }
 
     // 검색어(search) 쿼리가 있으면, 제목/내용/브랜드명에서 검색
     if (req.query.search) {
@@ -334,10 +342,13 @@ router.delete("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
     if (!isValidObjectId(id)) return res.fail("INVALID_ID", 400)
 
     // DB에서 해당 ID와 작성자가 일치하는 문서를 찾아 삭제
-    const removed = await Campaign.findOneAndDelete({
-        _id: id,
-        createdBy: req.user.id,
-    })
+    const removed = await Campaign.findOneAndUpdate(
+        { _id: id, createdBy: req.user.id }, // 본인이 작성한 공고인지 확인
+        { $set: { isPublic: false } }, // isPublic을 false로 변경
+        { new: true }
+    )
+
+    // 업데이트할 문서를 찾지 못하면 권한이 없거나 존재하지 않는 공고임
     if (!removed) return res.fail("RECRUIT_FORBIDDEN_DELETE", 403)
     return res.ok({ message: "삭제 완료" })
 })
