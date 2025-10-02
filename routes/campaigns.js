@@ -5,6 +5,7 @@ const { isValidObjectId } = require("mongoose")
 
 // [수정] Campaign 모델 전체를 가져오도록 변경
 const Campaign = require("../models/Campaign")
+const Application = require("../models/Application")
 
 const auth = require("../src/middleware/auth")
 const optionalAuth = require("../src/middleware/optionalAuth")
@@ -212,9 +213,9 @@ router.get("/", optionalAuth, async (req, res) => {
     // 로그인한 사용자의 경우, 각 공고에 대한 지원 여부를 확인
     let appliedCampaignIds = new Set()
     if (req.user) {
-        const userApplications = await _find({ userId: req.user.id }).select(
-            "campaignId"
-        )
+        const userApplications = await Application.find({
+            userId: req.user.id,
+        }).select("campaignId")
         appliedCampaignIds = new Set(
             userApplications.map((app) => app.campaignId.toString())
         )
@@ -273,7 +274,7 @@ router.get("/:id", optionalAuth, async (req, res) => {
     // 로그인 시, 현재 사용자의 지원 여부 조회
     let isApplied = false
     if (req.user) {
-        const application = await findOne({
+        const application = await Application.findOne({
             userId: req.user.id,
             campaignId: c._id,
         })

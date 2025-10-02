@@ -114,6 +114,5 @@ const CampaignSchema = new Schema(
 )
 
 CampaignSchema.index({ createdAt: -1 })
-CampaignSchema.index({ status: 1 }) // [수정] type 필드 제거
 
 module.exports = mongoose.model("Campaign", CampaignSchema, "campaigns-dev")
