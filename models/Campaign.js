@@ -1,8 +1,7 @@
-// [수정] 파일 상단에 mongoose와 Schema를 명시적으로 가져오도록 수정
 const mongoose = require("mongoose")
 const { Schema } = mongoose
 
-// Product 스키마에 detailHtml 추가 (Recruit 모델 호환)
+// 캠페인에 포함될 수 있는 개별 상품의 스키마
 const ProductItemSchema = new Schema(
     {
         url: { type: String, required: true },
@@ -14,16 +13,16 @@ const ProductItemSchema = new Schema(
         title: String,
         price: Number,
         salePrice: Number,
-        saleDurationSec: Number, // 0|3600|7200|10800
+        saleDurationSec: Number,
         saleUntil: Date,
         imageUrl: String,
         deepLink: String,
         utm: { source: String, medium: String, campaign: String },
-        detailHtml: String, // Recruit 모델의 Product 스키마와 호환을 위해 추가
+        detailHtml: String,
     },
     { _id: true }
 )
-
+// 지원자에게 질문할 항목의 스키마
 const QuestionSchema = new Schema(
     {
         label: { type: String, required: true },
@@ -38,92 +37,83 @@ const QuestionSchema = new Schema(
     { _id: true }
 )
 
+// [주석] 모집 공고의 전체 데이터 구조를 정의하는 메인 스키마입니다.
 const CampaignSchema = new Schema(
     {
-        type: {
-            type: String,
-            enum: ["product", "recruit"],
-            required: true,
-            index: true,
-        },
+        // --- 기본 정보 ---
         status: {
+            // 공고 상태
             type: String,
             enum: ["draft", "scheduled", "published", "closed"],
             default: "draft",
             index: true,
         },
-        // [추가] 내부 관리용 제목 필드 추가
-        internalTitle: { type: String, trim: true },
-        // [추가] '쇼호스트 모집' 등 제목 앞에 붙는 말머리 필드 추가
-        prefix: { type: String, trim: true },
-        title: { type: String, required: true },
-        brand: String,
-        category: String,
-
-        coverImageUrl: String,
-        thumbnailUrl: String, // derived from coverImageUrl (Cloudinary transform)
-        // [추가] 상품 공고용 세로(9:16) 커버 이미지 URL 필드 추가
-        liveVerticalCoverUrl: { type: String, trim: true },
-        descriptionHTML: String,
-
-        // [기존] liveDate, liveTime을 사용하고 있으나, 프론트 요청에 따라 startTime, endTime 추가
-        liveDate: Date,
-        liveTime: String,
-        // [추가] 시작 시간과 종료 시간 필드 추가
-        startTime: { type: String, trim: true },
-        endTime: { type: String, trim: true },
-
-        publishAt: Date,
-        closeAt: Date, // 프론트의 'applyDeadline'에 해당
-
-        // [추가] 상품 공고 타입 전용 필드들
-        liveStreamUrl: { type: String, trim: true }, // 실제 방송 송출 링크
-        productThumbnailUrl: { type: String, trim: true }, // 상품 썸네일
-        productName: { type: String, trim: true }, // 상품명
-        productUrl: { type: String, trim: true }, // 상품 구매 링크
-
-        // 상품 정보 (이제 'recruit' 타입도 상품을 가질 수 있음)
-        products: [ProductItemSchema], // 'product' 타입에서는 더 이상 사용되지 않음
-
-        location: String,
-        shootDate: Date,
-        shootTime: String,
-        fee: Number, // 'pay'에서 'fee'로 이름 변경 및 타입 지정
-        feeNegotiable: { type: Boolean, default: false }, // 'payNegotiable'에서 이름 변경
-
-        // 모집형 상세 정보
-        recruit: {
-            // Recruit 모델의 필드들을 통합
-            recruitType: {
-                type: String,
-                enum: ["product", "host", "both"],
-                default: "product",
-            },
-            // [추가] 총 촬영 진행 시간 필드 추가
-            durationInHours: { type: Number },
-            location: String,
-            requirements: String, // Recruit 모델의 description과 호환
-            preferred: String,
-            questions: [QuestionSchema],
+        brandName: { type: String, required: true, trim: true }, // 브랜드명 (필수)
+        prefix: {
+            // 말머리 (선택)
+            type: String,
+            enum: ["쇼호스트모집", "촬영스태프", "모델모집", "기타모집"],
+            trim: true,
+        },
+        title: { type: String, required: true }, // 공고 제목 (필수)
+        content: { type: String }, // 공고 내용 (HTML 가능)
+        category: {
+            // 카테고리 (선택)
+            type: String,
+            enum: ["뷰티", "패션", "식품", "가전", "생활/리빙"],
         },
 
+        // --- 일정 및 장소 ---
+        location: { type: String, trim: true }, // 촬영 장소
+        shootDate: { type: Date, required: true }, // 촬영일 (필수)
+        closeAt: { type: Date, required: true }, // 공고 마감일 (필수)
+        durationHours: { type: Number, required: true }, // 총 촬영 시간 (단위: 시간, 필수)
+        startTime: { type: String, required: true, trim: true }, // 촬영 시작 시간 (필수)
+        endTime: { type: String, required: true, trim: true }, // 촬영 종료 시간 (필수)
+
+        // --- 출연료 정보 ---
+        fee: { type: Number }, // 출연료
+        feeNegotiable: { type: Boolean, default: false }, // 출연료 협의 가능 여부
+
+        // --- 이미지 및 외부 링크 ---
+        coverImageUrl: { type: String, trim: true }, // 공고 대표 이미지 (가로)
+        thumbnailUrl: { type: String, trim: true }, // 자동 생성된 썸네일 이미지
+        liveVerticalCoverUrl: { type: String, trim: true }, // 쇼핑라이브용 세로 커버 이미지
+        liveStreamUrl: { type: String, trim: true }, // 쇼핑라이브 방송 링크
+
+        // --- 관련 상품 정보 ---
+        productThumbnailUrl: { type: String, trim: true }, // 상품 썸네일 이미지
+        productName: { type: String, trim: true }, // 상품명
+        productUrl: { type: String, trim: true }, // 상품 구매 링크
+        products: [ProductItemSchema], // 상세 상품 목록
+
+        // --- 기타 모집 정보 ---
+        recruit: {
+            requirements: String, // 지원 자격
+            preferred: String, // 우대 사항
+            questions: [QuestionSchema], // 추가 질문
+        },
+
+        // --- 통계 ---
         metrics: {
             views: { type: Number, default: 0 },
             clicks: { type: Number, default: 0 },
             applications: { type: Number, default: 0 },
         },
 
+        // --- 소유자 정보 ---
         createdBy: {
+            // 공고를 생성한 사용자 ID
             type: Schema.Types.ObjectId,
             ref: "User",
             required: true,
             index: true,
         },
     },
-    { timestamps: true }
+    { timestamps: true } // 생성/수정 시간 자동 기록
 )
 
 CampaignSchema.index({ createdAt: -1 })
-CampaignSchema.index({ type: 1, status: 1 })
+CampaignSchema.index({ status: 1 }) // [수정] type 필드 제거
 
 module.exports = mongoose.model("Campaign", CampaignSchema, "campaigns-dev")
