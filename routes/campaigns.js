@@ -133,10 +133,13 @@ router.post(
             fee,
             feeNegotiable,
             coverImageUrl,
-            status,
+            isPublic,
+            liveVerticalCoverUrl,
+            liveStreamUrl,
+            productThumbnailUrl,
+            productName,
+            productUrl,
         } = req.body
-
-        const { isPublic, ...restOfBody } = req.body
 
         // DB에 저장할 최종 데이터 객체(payload)를 구성
         const payload = {
@@ -154,7 +157,12 @@ router.post(
             fee,
             feeNegotiable,
             coverImageUrl,
-            isPublic: isPublic === false ? false : true, // 명시적으로 false가 아니면 모두 true(공개)로 처리
+            isPublic: isPublic === false ? false : true,
+            liveVerticalCoverUrl,
+            liveStreamUrl,
+            productThumbnailUrl,
+            productName,
+            productUrl,
             createdBy: req.user.id,
         }
 
