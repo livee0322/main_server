@@ -268,7 +268,7 @@ router.get("/mine", auth, requireRole("brand", "admin"), async (req, res) => {
 
 /**
  * @route   GET /api/v1/campaigns/:id
- * @desc    특정 ID의 공고 상세 정보를 조회합니다.
+ * @desc    특정 ID의 공고 상세 정보를 조회
  * @access  Public (비공개 글은 본인만)
  */
 router.get("/:id", optionalAuth, async (req, res) => {
@@ -279,13 +279,6 @@ router.get("/:id", optionalAuth, async (req, res) => {
     }
     const c = await Campaign.findById(id)
     if (!c) return res.fail("NOT_FOUND", 404)
-
-    // 소유자 여부 판별
-    const isOwner = req.user && String(c.createdBy) === req.user.id
-    // 비공개(published가 아님) 공고는 소유자만 접근 가능
-    if (!isOwner && c.status !== "published") {
-        return res.fail("FORBIDDEN", 403)
-    }
 
     // 로그인 시, 현재 사용자의 지원 여부 조회
     let isApplied = false
