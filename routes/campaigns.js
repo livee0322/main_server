@@ -1,6 +1,5 @@
 const router = require("express").Router()
 const { body, query, validationResult } = require("express-validator")
-const sanitizeHtml = require("sanitize-html")
 const { isValidObjectId } = require("mongoose")
 
 // [수정] Campaign 모델 전체를 가져오도록 변경
@@ -11,25 +10,7 @@ const auth = require("../src/middleware/auth")
 const optionalAuth = require("../src/middleware/optionalAuth")
 const requireRole = require("../src/middleware/requireRole")
 const asyncHandler = require("../src/middleware/asyncHandler")
-const { toThumb, toDTO } = require("../src/utils/common")
-const { find: _find, findOne } = require("../models/Application")
-
-const sanitize = (html) =>
-    sanitizeHtml(html || "", {
-        allowedTags: sanitizeHtml.defaults.allowedTags.concat([
-            "img",
-            "h1",
-            "h2",
-            "u",
-            "span",
-            "figure",
-            "figcaption",
-        ]),
-        allowedAttributes: {
-            "*": ["style", "class", "id", "src", "href", "alt", "title"],
-        },
-        allowedSchemes: ["http", "https", "data", "mailto", "tel"],
-    })
+const { toThumb, toDTO, sanitize } = require("../src/utils/common")
 
 /**
  * @route   GET /api/v1/campaigns/meta

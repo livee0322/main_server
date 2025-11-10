@@ -6,6 +6,7 @@ const Portfolio = require("../models/Portfolio")
 const auth = require("../src/middleware/auth")
 const requireRole = require("../src/middleware/requireRole")
 const asyncHandler = require("../src/middleware/asyncHandler")
+const { formatDate } = require("../src/utils/common")
 const User = require("../models/User")
 
 /**
@@ -106,17 +107,6 @@ router.get(
 
         // --- 3. 프론트엔드 응답 형식에 맞게 데이터 가공 ---
         const items = proposals.map((p) => {
-            // 날짜를 'YYYY. MM. DD' 형식으로 변환하는 헬퍼 함수
-            const formatDate = (date) =>
-                new Date(date)
-                    .toLocaleDateString("ko-KR", {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                    })
-                    .replace(/\s/g, "")
-                    .slice(0, -1)
-
             return {
                 id: p._id,
                 recipient: {
@@ -176,15 +166,6 @@ router.get(
 
         // --- 3. 프론트엔드 응답 형식에 맞게 데이터 가공 ---
         const items = proposals.map((p) => {
-            const formatDate = (date) =>
-                new Date(date)
-                    .toLocaleDateString("ko-KR", {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                    })
-                    .replace(/\s/g, "")
-                    .slice(0, -1)
             return {
                 id: p._id,
                 sender: {
