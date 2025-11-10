@@ -10,6 +10,7 @@ const Application = require("../models/Application")
 const auth = require("../src/middleware/auth")
 const optionalAuth = require("../src/middleware/optionalAuth")
 const requireRole = require("../src/middleware/requireRole")
+const asyncHandler = require("../src/middleware/asyncHandler")
 const { toThumb, toDTO } = require("../src/utils/common")
 const { find: _find, findOne } = require("../models/Application")
 
@@ -35,7 +36,7 @@ const sanitize = (html) =>
  * @desc    공고 생성 및 검색에 필요한 메타데이터(카테고리, 브랜드 목록 등)를 제공합니다.
  * @access  Public
  */
-router.get("/meta", async (req, res) => {
+router.get("/meta", asyncHandler(async (req, res) => {
     // [주석] 현재는 카테고리 목록을 하드코딩하여 제공합니다.
     const productCats = [
         "뷰티",
@@ -63,7 +64,7 @@ router.get("/meta", async (req, res) => {
             updatedAt: new Date().toISOString(),
         },
     })
-})
+}))
 
 /**
  * @route   POST /api/v1/campaigns
@@ -108,7 +109,7 @@ router.post(
             .isURL(),
     ],
     // 4. 실제 API 로직을 처리하는 비동기 함수
-    async (req, res) => {
+    asyncHandler(async (req, res) => {
         // 유효성 검사 결과에 에러가 있는지 확인
         const errors = validationResult(req)
         if (!errors.isEmpty()) {
@@ -177,7 +178,7 @@ router.post(
 
         const created = await Campaign.create(payload)
         return res.ok({ data: toDTO(created) }, 201)
-    }
+    })
 )
 
 /**
@@ -185,7 +186,7 @@ router.post(
  * @desc    모집 공고 목록을 검색, 정렬, 페이지네이션하여 조회합니다.
  * @access  Public (비로그인도 가능)
  */
-router.get("/", optionalAuth, async (req, res) => {
+router.get("/", optionalAuth, asyncHandler(async (req, res) => {
     // 페이지네이션 설정
     const page = Math.max(parseInt(req.query.page || "1", 10), 1)
     const limit = Math.min(
@@ -252,26 +253,26 @@ router.get("/", optionalAuth, async (req, res) => {
         totalPages: Math.ceil(totalItems / limit),
         totalItems,
     })
-})
+}))
 
 /**
  * @route   GET /api/v1/campaigns/mine
  * @desc    현재 로그인된 사용자가 생성한 모든 공고 목록을 조회합니다.
  * @access  Private (brand, admin 역할만 가능)
  */
-router.get("/mine", auth, requireRole("brand", "admin"), async (req, res) => {
+router.get("/mine", auth, requireRole("brand", "admin"), asyncHandler(async (req, res) => {
     const docs = await Campaign.find({ createdBy: req.user.id }).sort({
         createdAt: -1,
     })
     return res.ok({ items: docs.map(toDTO) })
-})
+}))
 
 /**
  * @route   GET /api/v1/campaigns/:id
  * @desc    특정 ID의 공고 상세 정보를 조회
  * @access  Public (비공개 글은 본인만)
  */
-router.get("/:id", optionalAuth, async (req, res) => {
+router.get("/:id", optionalAuth, asyncHandler(async (req, res) => {
     const { id } = req.params
     // ID 형식 유효성 검사
     if (!isValidObjectId(id)) {
@@ -294,14 +295,14 @@ router.get("/:id", optionalAuth, async (req, res) => {
     const dto = toDTO(c)
     dto.isApplied = isApplied
     return res.ok({ data: dto }) // [수정] toDTO(c) -> dto
-})
+}))
 
 /**
  * @route   PUT /api/v1/campaigns/:id
  * @desc    특정 ID의 공고 정보를 수정합니다.
  * @access  Private (작성자 본인만 가능)
  */
-router.put("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
+router.put("/:id", auth, requireRole("brand", "admin"), asyncHandler(async (req, res) => {
     const { id } = req.params
     if (!isValidObjectId(id)) return res.fail("INVALID_ID", 400)
 
@@ -331,14 +332,14 @@ router.put("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
     )
     if (!updated) return res.fail("RECRUIT_FORBIDDEN_EDIT", 403)
     return res.ok({ data: toDTO(updated) })
-})
+}))
 
 /**
  * @route   DELETE /api/v1/campaigns/:id
  * @desc    특정 ID의 공고를 삭제합니다.
  * @access  Private (작성자 본인만 가능)
  */
-router.delete("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
+router.delete("/:id", auth, requireRole("brand", "admin"), asyncHandler(async (req, res) => {
     const { id } = req.params
     if (!isValidObjectId(id)) return res.fail("INVALID_ID", 400)
 
@@ -352,6 +353,6 @@ router.delete("/:id", auth, requireRole("brand", "admin"), async (req, res) => {
     // 업데이트할 문서를 찾지 못하면 권한이 없거나 존재하지 않는 공고임
     if (!removed) return res.fail("RECRUIT_FORBIDDEN_DELETE", 403)
     return res.ok({ message: "삭제 완료" })
-})
+}))
 
 module.exports = router

@@ -3,11 +3,12 @@ const router = require('express').Router();
 const axios = require('axios');
 const cheerio = require('cheerio');
 const sanitizeHtml = require('sanitize-html');
+const asyncHandler = require('../src/middleware/asyncHandler');
 
 // 로깅 모델
 let TrackEvent;
 try {
-    TrackEvent = require('../../models/TrackEvent'); // src/routes -> ../../models
+    TrackEvent = require('../models/TrackEvent');
 } catch (e) {
     // 모델이 없더라도 서버가 죽지 않도록 no-op
     TrackEvent = mongooseFallback();
@@ -39,10 +40,10 @@ function detectVendor(url = '') {
     return 'unknown';
 }
 
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
     const url = String(req.query.url || '').trim();
     if (!url)
-        return res.status(400).json({ ok: false, message: 'url is required' });
+        return res.fail('VALIDATION_FAILED', 400, { userMessage: 'url is required' });
 
     const vendor = detectVendor(url);
     let result = { vendor, title: '', price: null, image: '', raw: {} };
@@ -133,12 +134,11 @@ router.get('/', async (req, res) => {
             ok: false,
             message: err?.message,
         });
-        return res.status(500).json({
-            ok: false,
-            message: 'SCRAPE_FAILED',
+        return res.fail('INTERNAL_ERROR', 500, {
+            userMessage: '스크래핑에 실패했습니다.',
             detail: err?.message,
         });
     }
-});
+}));
 
 module.exports = router;
