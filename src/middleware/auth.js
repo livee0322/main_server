@@ -5,7 +5,7 @@ module.exports = (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "인증이 필요합니다." });
+    return res.fail("AUTH_REQUIRED", 401);
   }
 
   const token = authHeader.split(" ")[1];
@@ -16,6 +16,6 @@ module.exports = (req, res, next) => {
     next();
   } catch (err) {
     console.error("❌ auth 미들웨어 오류:", err);
-    return res.status(403).json({ message: "유효하지 않은 토큰입니다." });
+    return res.fail("INVALID_TOKEN", 403);
   }
 };

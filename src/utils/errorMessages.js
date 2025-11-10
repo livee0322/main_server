@@ -42,6 +42,14 @@ module.exports = {
         message: "Role is not permitted",
         userMessage: "이 기능을 사용할 권한이 없습니다.",
     },
+    AUTH_REQUIRED: {
+        message: "Authentication required",
+        userMessage: "인증이 필요합니다.",
+    },
+    INVALID_TOKEN: {
+        message: "Invalid or expired token",
+        userMessage: "유효하지 않은 토큰입니다.",
+    },
     VALIDATION_MISSING_FIELDS: {
         message: "Required fields are missing",
         userMessage: "필수 입력값이 누락되었습니다.",
