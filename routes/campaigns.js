@@ -193,10 +193,13 @@ router.get("/", optionalAuth, asyncHandler(async (req, res) => {
 
     // 정렬(sort) 옵션 설정
     const sortOption = {}
-    if (req.query.sort === "deadline") {
+    const sortParam = req.query.sort
+    if (sortParam === "deadline") {
         sortOption.closeAt = 1 // 마감일순
+    } else if (sortParam === "latest" || sortParam === "created") {
+        sortOption.createdAt = -1 // 최신순
     } else {
-        sortOption.createdAt = -1 // 최신순 (기본)
+        sortOption.createdAt = -1 // 최신순 (기본값)
     }
 
     // 데이터베이스에서 공고 목록과 전체 개수를 동시에 조회

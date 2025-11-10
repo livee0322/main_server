@@ -40,11 +40,49 @@ const formatDate = (date) =>
     .replace(/\s/g, "")
     .slice(0, -1)
 
+// 카테고리 한글 → 영문 코드 매핑
+const categoryMap = {
+  "뷰티": "beauty",
+  "패션": "fashion",
+  "식품": "food",
+  "가전": "electronics",
+  "생활/리빙": "lifestyle",
+}
+
+// 모집구분 한글 → 영문 코드 매핑
+const prefixMap = {
+  "쇼호스트모집": "showhost",
+  "촬영스태프": "staff",
+  "모델모집": "model",
+  "기타모집": "other",
+}
+
+// 문자열을 줄바꿈 기준으로 배열로 변환 (자격요건, 우대사항용)
+const stringToArray = (str) => {
+  if (!str) return []
+  return str
+    .split(/\n|\r\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+}
+
 // DB Document를 API 응답 DTO(Data Transfer Object)로 변환하는 헬퍼
 const toDTO = (doc) => {
   const o = (doc?.toObject ? doc.toObject() : doc) || {}
   const imageUrl = o.coverImageUrl || o.thumbnailUrl || ""
   const thumbnailUrl = o.thumbnailUrl || toThumb(imageUrl) || ""
+  
+  // 카테고리 영문 코드 변환
+  const categoryCode = o.category ? categoryMap[o.category] || o.category : null
+  const categoryName = o.category || null
+  
+  // 모집구분 영문 코드 변환
+  const prefixCode = o.prefix ? prefixMap[o.prefix] || o.prefix : null
+  const prefixName = o.prefix || null
+  
+  // 자격요건 및 우대사항 배열 변환
+  const qualifications = o.recruit?.requirements ? stringToArray(o.recruit.requirements) : []
+  const preferredQualifications = o.recruit?.preferred ? stringToArray(o.recruit.preferred) : []
   
   return { 
     ...o, 
@@ -54,7 +92,27 @@ const toDTO = (doc) => {
     brand: o.brand,
     fee: o.fee,
     feeNegotiable: o.feeNegotiable,
-    liveTime: o.liveTime
+    liveTime: o.liveTime,
+    // 카테고리 영문 코드 변환
+    category: categoryCode,
+    categoryCode,
+    categoryName,
+    // 모집구분 영문 코드 변환
+    prefix: prefixCode,
+    prefixCode,
+    prefixName,
+    // 상세 내용 (content와 동일)
+    detailedContent: o.content || "",
+    // 브랜드 소개 (현재 모델에 없음, 추후 추가 가능)
+    brandIntroduction: o.brandIntroduction || "",
+    // 모집부문 상세 설명 (recruit.requirements와 동일)
+    recruitmentSection: o.recruit?.requirements || "",
+    // 자격요건 배열
+    qualifications,
+    // 우대사항 배열
+    preferredQualifications,
+    // 상품 이미지 URL (productThumbnailUrl 사용)
+    productImageUrl: o.productThumbnailUrl || "",
   }
 }
 
