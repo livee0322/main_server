@@ -31,6 +31,25 @@ if (!process.env.MONGO_URI) {
 }
 mongoose.set("strictQuery", true)
 
+// 마이그레이션 로직을 별도 함수로 분리 (한 번만 실행)
+let migrationExecuted = false
+const runMigration = async () => {
+  if (migrationExecuted) return
+  try {
+    const db = mongoose.connection.db
+    if (db) {
+      const exists = await db.collection("portfolios").indexExists("user_1")
+      if (exists) {
+        await db.collection("portfolios").dropIndex("user_1")
+        console.log("[migrate] dropped legacy unique index user_1")
+      }
+      migrationExecuted = true
+    }
+  } catch (e) {
+    console.warn("[migrate] drop user_1 skipped:", e.message)
+  }
+}
+
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {
@@ -40,21 +59,8 @@ const connectDB = async () => {
       maxPoolSize: 10,
     })
     console.log("✅ MongoDB connected")
-    // [추가] DB 연결 성공 직후, 마이그레이션 로직을 실행하도록 이동
-    try {
-      const db = mongoose.connection.db
-      if (db) {
-        const exists = await db
-          .collection("portfolios")
-          .indexExists("user_1")
-        if (exists) {
-          await db.collection("portfolios").dropIndex("user_1")
-          console.log("[migrate] dropped legacy unique index user_1")
-        }
-      }
-    } catch (e) {
-      console.warn("[migrate] drop user_1 skipped:", e.message)
-    }
+    // DB 연결 성공 후 마이그레이션 실행 (한 번만)
+    await runMigration()
   } catch (err) {
     console.error("❌ MongoDB connect error:", err.message)
     setTimeout(connectDB, 5000)
@@ -111,20 +117,6 @@ app.use(`${BASE_PATH}/brand-test`, require("./routes/brand-test"))
 app.use(`${BASE_PATH}/model-test`, require("./routes/model-test"));
 app.use(`${BASE_PATH}/offers-test`, require('./routes/offers-test'));
 app.use('/api/v1/sponsorship-test', require('./routes/sponsorship-test'));
-
-; (async () => {
-  try {
-    const exists = await mongoose.connection.db
-      .collection("portfolios")
-      .indexExists("user_1")
-    if (exists) {
-      await mongoose.connection.db.collection("portfolios").dropIndex("user_1")
-      console.log("[migrate] dropped legacy unique index user_1")
-    }
-  } catch (e) {
-    console.warn("[migrate] drop user_1 skipped:", e.message)
-  }
-})()
 
 /* ===== 헬스체크 ===== */
 const stateName = (s) =>
