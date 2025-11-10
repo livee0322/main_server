@@ -10,7 +10,7 @@ const auth = require("../src/middleware/auth")
 const optionalAuth = require("../src/middleware/optionalAuth")
 const requireRole = require("../src/middleware/requireRole")
 const asyncHandler = require("../src/middleware/asyncHandler")
-const { toThumb, toDTO, sanitize } = require("../src/utils/common")
+const { toThumb, toDTO, sanitize, convertCategoryToKorean, convertPrefixToKorean } = require("../src/utils/common")
 
 /**
  * @route   GET /api/v1/campaigns/meta
@@ -64,12 +64,13 @@ router.post(
         body("brandName", "브랜드명을 입력해주세요.").notEmpty().isString(),
         body("prefix", "올바른 말머리를 선택해주세요.")
             .optional()
-            .isIn(["쇼호스트모집", "촬영스태프", "모델모집", "기타모집"]),
+            .isIn(["쇼호스트모집", "촬영스태프", "모델모집", "기타모집", "showhost", "staff", "model", "other"]),
         body("title", "제목을 입력해주세요.").notEmpty().isString(),
         body("content", "내용은 문자열이어야 합니다.").optional().isString(),
+        body("detailedContent", "상세 내용은 문자열이어야 합니다.").optional().isString(),
         body("category", "올바른 카테고리를 선택해주세요.")
             .optional()
-            .isIn(["뷰티", "패션", "식품", "가전", "생활/리빙"]),
+            .isIn(["뷰티", "패션", "식품", "가전", "생활/리빙", "beauty", "fashion", "food", "electronics", "lifestyle"]),
         body("shootDate", "촬영일을 올바른 날짜 형식으로 입력해주세요.")
             .notEmpty()
             .isISO8601(),
@@ -77,7 +78,7 @@ router.post(
             .notEmpty()
             .isISO8601(),
         body("durationHours", "총 촬영시간을 숫자로 입력해주세요.")
-            .notEmpty()
+            .optional()
             .isNumeric(),
         body("startTime", "시작 시간을 입력해주세요.").notEmpty().isString(),
         body("endTime", "종료 시간을 입력해주세요.").notEmpty().isString(),
@@ -105,6 +106,7 @@ router.post(
             prefix,
             title,
             content,
+            detailedContent,
             category,
             location,
             shootDate,
@@ -123,17 +125,40 @@ router.post(
             productUrl,
         } = req.body
 
+        // 영문 코드를 한글로 변환 (한글이면 그대로 유지)
+        const categoryKorean = category ? convertCategoryToKorean(category) : null
+        const prefixKorean = prefix ? convertPrefixToKorean(prefix) : null
+
+        // content와 detailedContent를 합침 (detailedContent가 있으면 우선, 없으면 content 사용)
+        const finalContent = detailedContent || content || ""
+
+        // durationHours 자동 계산 (startTime과 endTime이 있으면)
+        let calculatedDurationHours = durationHours
+        if (!calculatedDurationHours && startTime && endTime) {
+            try {
+                const start = new Date(`2000-01-01T${startTime}:00`)
+                const end = new Date(`2000-01-01T${endTime}:00`)
+                if (end < start) {
+                    // 다음날로 넘어가는 경우
+                    end.setDate(end.getDate() + 1)
+                }
+                calculatedDurationHours = (end - start) / (1000 * 60 * 60) // 시간 단위로 변환
+            } catch (e) {
+                // 계산 실패 시 durationHours는 null로 유지
+            }
+        }
+
         // DB에 저장할 최종 데이터 객체(payload)를 구성
         const payload = {
             brandName,
-            prefix,
+            prefix: prefixKorean,
             title,
-            content,
-            category,
+            content: finalContent,
+            category: categoryKorean,
             location,
             shootDate,
             closeAt,
-            durationHours,
+            durationHours: calculatedDurationHours,
             startTime,
             endTime,
             fee,

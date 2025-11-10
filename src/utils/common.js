@@ -49,12 +49,46 @@ const categoryMap = {
   "생활/리빙": "lifestyle",
 }
 
+// 카테고리 영문 코드 → 한글 매핑 (역매핑)
+const categoryReverseMap = {
+  "beauty": "뷰티",
+  "fashion": "패션",
+  "food": "식품",
+  "electronics": "가전",
+  "lifestyle": "생활/리빙",
+}
+
 // 모집구분 한글 → 영문 코드 매핑
 const prefixMap = {
   "쇼호스트모집": "showhost",
   "촬영스태프": "staff",
   "모델모집": "model",
   "기타모집": "other",
+}
+
+// 모집구분 영문 코드 → 한글 매핑 (역매핑)
+const prefixReverseMap = {
+  "showhost": "쇼호스트모집",
+  "staff": "촬영스태프",
+  "model": "모델모집",
+  "other": "기타모집",
+}
+
+// 영문 코드를 한글로 변환하는 헬퍼 함수
+const convertCategoryToKorean = (code) => {
+  if (!code) return null
+  // 이미 한글이면 그대로 반환
+  if (categoryMap[code]) return code
+  // 영문 코드면 한글로 변환
+  return categoryReverseMap[code] || code
+}
+
+const convertPrefixToKorean = (code) => {
+  if (!code) return null
+  // 이미 한글이면 그대로 반환
+  if (prefixMap[code]) return code
+  // 영문 코드면 한글로 변환
+  return prefixReverseMap[code] || code
 }
 
 // 문자열을 줄바꿈 기준으로 배열로 변환 (자격요건, 우대사항용)
@@ -121,4 +155,6 @@ module.exports = {
   toDTO,
   sanitize,
   formatDate,
+  convertCategoryToKorean,
+  convertPrefixToKorean,
 }
