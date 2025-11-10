@@ -66,6 +66,17 @@ const runMigration = async () => {
   }
 }
 
+// 데이터베이스 재연결 로직 (지수 백오프 적용)
+let reconnectAttempts = 0
+const MAX_RECONNECT_DELAY = 30000 // 최대 30초
+const INITIAL_RECONNECT_DELAY = 1000 // 초기 1초
+
+const getReconnectDelay = () => {
+  const delay = Math.min(INITIAL_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY)
+  reconnectAttempts++
+  return delay
+}
+
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {
@@ -75,19 +86,28 @@ const connectDB = async () => {
       maxPoolSize: 10,
     })
     console.log("✅ MongoDB connected")
+    // 연결 성공 시 재연결 시도 횟수 리셋
+    reconnectAttempts = 0
     // DB 연결 성공 후 마이그레이션 실행 (한 번만)
     await runMigration()
   } catch (err) {
     console.error("❌ MongoDB connect error:", err.message)
-    setTimeout(connectDB, 5000)
+    const delay = getReconnectDelay()
+    console.log(`🔄 ${delay / 1000}초 후 재연결 시도... (시도 횟수: ${reconnectAttempts})`)
+    setTimeout(connectDB, delay)
   }
 }
 connectDB()
 mongoose.connection.on("disconnected", () => {
   console.warn("⚠️ MongoDB disconnected. 재연결 시도…")
+  // disconnected 이벤트는 이미 연결된 상태에서 끊어진 경우이므로 즉시 재시도
+  reconnectAttempts = 0
   connectDB()
 })
-mongoose.connection.on("reconnected", () => console.log("🔁 MongoDB reconnected"))
+mongoose.connection.on("reconnected", () => {
+  console.log("🔁 MongoDB reconnected")
+  reconnectAttempts = 0
+})
 
 /* ===== 응답 헬퍼 ===== */
 app.use((req, res, next) => {
