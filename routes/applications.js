@@ -7,11 +7,7 @@ const requireRole = require("../src/middleware/requireRole")
 const Campaign = require("../models/Campaign")
 const Application = require("../models/Application")
 const asyncHandler = require("../src/middleware/asyncHandler")
-
-const toDTO = (doc) => {
-    const o = (doc?.toObject ? doc.toObject() : doc) || {}
-    return { ...o, id: o._id?.toString?.() || o.id }
-}
+const { toDTO } = require("../src/utils/common")
 
 /* 내 지원 단건 조회 */
 router.get("/mine", auth, query("campaignId").isString().notEmpty(), asyncHandler(async (req, res) => {
