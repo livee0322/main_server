@@ -113,11 +113,11 @@ app.use(`${BASE_PATH}/campaigns`, require("./routes/campaigns")) // ✅ 백틱 �
 app.use(`${BASE_PATH}/applications`, require("./routes/applications"))
 app.use(`${BASE_PATH}/scrape`, require("./routes/scrape"))
 app.use(`${BASE_PATH}/track`, require("./routes/track"))
-app.use(`${BASE_PATH}/clips`, require("./routes/clips"));
-app.use(`${BASE_PATH}/models`, require("./routes/models"));
-app.use(`${BASE_PATH}/studios`, require("./routes/studios"));
-app.use(`${BASE_PATH}/news`, require("./routes/news"));
-app.use(`${BASE_PATH}/proposals`, require("./routes/proposals"));
+app.use(`${BASE_PATH}/clips`, require("./routes/clips"))
+app.use(`${BASE_PATH}/models`, require("./routes/models"))
+app.use(`${BASE_PATH}/studios`, require("./routes/studios"))
+app.use(`${BASE_PATH}/news`, require("./routes/news"))
+app.use(`${BASE_PATH}/proposals`, require("./routes/proposals"))
 
 // 구버전 호환
 app.use("/api/auth", require("./routes/user"))
@@ -130,9 +130,9 @@ app.use(`${BASE_PATH}/portfolio-test`, require("./routes/portfolio-test"))
 app.use(`${BASE_PATH}/applications-test`, require("./routes/applications-test"))
 app.use(`${BASE_PATH}/shorts-test`, require("./routes/shorts-test"))
 app.use(`${BASE_PATH}/brand-test`, require("./routes/brand-test"))
-app.use(`${BASE_PATH}/model-test`, require("./routes/model-test"));
-app.use(`${BASE_PATH}/offers-test`, require('./routes/offers-test'));
-app.use('/api/v1/sponsorship-test', require('./routes/sponsorship-test'));
+app.use(`${BASE_PATH}/model-test`, require("./routes/model-test"))
+app.use(`${BASE_PATH}/offers-test`, require("./routes/offers-test"))
+app.use("/api/v1/sponsorship-test", require("./routes/sponsorship-test"))
 
 /* ===== 헬스체크 ===== */
 const stateName = (s) =>
