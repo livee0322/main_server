@@ -11,6 +11,25 @@ const errorMessages = require("./src/utils/errorMessages")
 process.on("unhandledRejection", (e) => console.error("UNHANDLED", e))
 process.on("uncaughtException", (e) => console.error("UNCAUGHT", e))
 
+/* ===== 환경 변수 검증 ===== */
+const requiredEnvVars = [
+  { key: "MONGO_URI", description: "MongoDB 연결 URI" },
+  { key: "JWT_SECRET", description: "JWT 토큰 서명용 비밀키" },
+]
+
+const missingVars = requiredEnvVars.filter(({ key }) => !process.env[key])
+
+if (missingVars.length > 0) {
+  console.error("❌ 필수 환경 변수가 누락되었습니다:")
+  missingVars.forEach(({ key, description }) => {
+    console.error(`   - ${key}: ${description}`)
+  })
+  console.error("서버를 시작할 수 없습니다. 환경 변수를 설정해주세요.")
+  process.exit(1)
+}
+
+console.log("✅ 필수 환경 변수 검증 완료")
+
 const app = express()
 
 /* ===== 기본 설정 ===== */
@@ -26,9 +45,6 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 /* ===== MongoDB ===== */
-if (!process.env.MONGO_URI) {
-  console.warn("⚠️ MONGO_URI 미설정 (Render 환경변수 확인)")
-}
 mongoose.set("strictQuery", true)
 
 // 마이그레이션 로직을 별도 함수로 분리 (한 번만 실행)
