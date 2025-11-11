@@ -62,6 +62,7 @@ router.post(
             .optional()
             .isBoolean(),
         body("brandName", "브랜드명을 입력해주세요.").notEmpty().isString(),
+        body("brandIntroduction", "브랜드 소개 내용은 문자열이어야 합니다.").optional().isString(),
         body("prefix", "올바른 말머리를 선택해주세요.")
             .optional()
             .isIn(["쇼호스트모집", "촬영스태프", "모델모집", "기타모집", "showhost", "staff", "model", "other"]),
@@ -103,6 +104,7 @@ router.post(
         // 요청 본문(body)에서 필요한 데이터만 안전하게 추출
         const {
             brandName,
+            brandIntroduction,
             prefix,
             title,
             content,
@@ -151,6 +153,7 @@ router.post(
         // DB에 저장할 최종 데이터 객체(payload)를 구성
         const payload = {
             brandName,
+            brandIntroduction,
             prefix: prefixKorean,
             title,
             content: finalContent,
@@ -176,6 +179,10 @@ router.post(
         // 내용(content)에 HTML이 있다면, 보안을 위해 안전하게 처리(sanitize)
         if (payload.content) {
             payload.content = sanitize(payload.content)
+        }
+        // 브랜드 소개(brandIntroduction)에 HTML이 있다면, 보안을 위해 안전하게 처리(sanitize)
+        if (payload.brandIntroduction) {
+            payload.brandIntroduction = sanitize(payload.brandIntroduction)
         }
         // 대표 이미지가 있고 썸네일이 없다면, 썸네일을 자동으로 생성
         if (payload.coverImageUrl && !payload.thumbnailUrl) {
@@ -331,6 +338,10 @@ router.put("/:id", auth, requireRole("brand", "admin"), asyncHandler(async (req,
     // 내용(content)이 변경되면 HTML Sanitize 처리
     if ($set.content) {
         $set.content = sanitize($set.content)
+    }
+    // 브랜드 소개(brandIntroduction)가 변경되면 HTML Sanitize 처리
+    if ($set.brandIntroduction) {
+        $set.brandIntroduction = sanitize($set.brandIntroduction)
     }
 
     // DB에서 해당 ID와 작성자가 일치하는 문서를 찾아 업데이트

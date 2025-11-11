@@ -137,7 +137,7 @@ const toDTO = (doc) => {
     prefixName,
     // 상세 내용 (content와 동일)
     detailedContent: o.content || "",
-    // 브랜드 소개 (현재 모델에 없음, 추후 추가 가능)
+    // 브랜드 소개
     brandIntroduction: o.brandIntroduction || "",
     // 모집부문 상세 설명 (recruit.requirements와 동일)
     recruitmentSection: o.recruit?.requirements || "",

@@ -48,6 +48,7 @@ const CampaignSchema = new Schema(
             index: true,
         },
         brandName: { type: String, required: true, trim: true }, // 브랜드명 (필수)
+        brandIntroduction: { type: String, trim: true }, // 브랜드 소개 내용 (HTML 가능)
         prefix: {
             // 말머리 (선택)
             type: String,
