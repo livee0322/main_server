@@ -30,10 +30,14 @@ router.get(
     requireRole("showhost"),
     asyncHandler(async (req, res) => {
         // 중요: 현재 로그인한 사용자(req.user.id)가 생성한 모든 포트폴리오를 검색합니다.
-        const items = await Portfolio.find({ user: req.user.id }).sort({
-            createdAt: -1,
-        })
-        return res.ok({ items })
+        const items = await Portfolio.find({ user: req.user.id })
+            .sort({ createdAt: -1 })
+            .lean()
+        
+        // _id를 id로 변환
+        const itemsWithId = items.map((item) => toPortfolioDTO(item))
+        
+        return res.ok({ items: itemsWithId })
     })
 )
 
@@ -51,10 +55,14 @@ router.post(
 
         const payload = { ...req.body, user: req.user.id }
         const created = await Portfolio.create(payload)
+        
+        // _id를 id로 변환
+        const data = toPortfolioDTO(created)
+        
         return res.ok(
             {
                 message: "포트폴리오가 성공적으로 생성되었습니다.",
-                data: created,
+                data,
             },
             201
         )
@@ -82,7 +90,11 @@ router.put(
         if (!updated) {
             return res.fail("PORTFOLIO_FORBIDDEN_EDIT", 403)
         }
-        return res.ok({ message: "성공적으로 수정되었습니다.", data: updated })
+        
+        // _id를 id로 변환
+        const data = toPortfolioDTO(updated)
+        
+        return res.ok({ message: "성공적으로 수정되었습니다.", data })
     })
 )
 

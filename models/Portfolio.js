@@ -29,6 +29,9 @@ const portfolioSchema = new mongoose.Schema(
         instagramUrl: { type: String, trim: true }, // 인스타그램 URL
         youtubeUrl: { type: String, trim: true }, // 유튜브 URL
         tiktokUrl: { type: String, trim: true }, // 틱톡 URL
+        contact: { type: String, trim: true }, // 연락처
+        openChat: { type: String, trim: true }, // 오픈채팅방 URL
+        registrationType: { type: String, trim: true }, // 등록구분
         publicScope: { type: String, default: "전체공개" }, // 공개 범위
         isReceivingOffers: { type: Boolean, default: true }, // 제안 받기 여부
         recentLives: [
