@@ -6,6 +6,15 @@ const requireRole = require("../src/middleware/requireRole")
 const asyncHandler = require("../src/middleware/asyncHandler") // 비동기 에러 핸들링
 const mongoose = require("mongoose") // ObjectId 유효성 검사를 위해 mongoose를 import
 
+// Portfolio DTO 변환 헬퍼 함수 (_id → id 변환)
+const toPortfolioDTO = (doc) => {
+    const o = (doc?.toObject ? doc.toObject() : doc) || {}
+    return {
+        ...o,
+        id: o._id?.toString?.() || o.id,
+    }
+}
+
 // ----------------------------------------------------------------
 // [신규/변경 API] 쇼호스트 본인 포트폴리오 관리 (다중)
 // ----------------------------------------------------------------
@@ -118,15 +127,31 @@ router.get(
         const query = { publicScope: "전체공개", status: "published" } // 공개 조건
         // (필요 시 기존 검색 로직 추가)
 
-        const items = await Portfolio.find(query)
-            .sort({ createdAt: -1 })
-            .skip((page - 1) * limit)
-            .limit(limit)
-            .select(
-                "nickname oneLineIntro mainThumbnailUrl experienceYears detailedRegion height"
-            )
+        // 전체 개수와 목록을 동시에 조회
+        const [items, totalItems] = await Promise.all([
+            Portfolio.find(query)
+                .sort({ createdAt: -1 })
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .select(
+                    "nickname oneLineIntro mainThumbnailUrl experienceYears detailedRegion height"
+                )
+                .lean(), // lean()을 사용하여 일반 객체로 변환
+            Portfolio.countDocuments(query),
+        ])
 
-        return res.ok({ items })
+        // _id를 id로 변환
+        const itemsWithId = items.map((item) => toPortfolioDTO(item))
+
+        // 페이지네이션 정보 계산
+        const totalPages = Math.ceil(totalItems / limit)
+
+        return res.ok({
+            items: itemsWithId,
+            currentPage: page,
+            totalPages,
+            totalItems,
+        })
     })
 )
 
@@ -152,7 +177,10 @@ router.get(
         if (!doc) {
             return res.fail("NOT_FOUND", 404)
         }
-        return res.ok({ data: doc })
+
+        // _id를 id로 변환
+        const data = toPortfolioDTO(doc)
+        return res.ok({ data })
     })
 )
 
